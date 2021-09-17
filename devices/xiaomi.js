@@ -7,6 +7,7 @@ const reporting = require('../lib/reporting');
 const extend = require('../lib/extend');
 const e = exposes.presets;
 const ea = exposes.access;
+const globalStore = require('../lib/store');
 
 const xiaomiExtend = {
     light_onoff_brightness_colortemp: (options={disableColorTempStartup: true}) => ({
@@ -865,24 +866,59 @@ module.exports = [
         model: 'SP-EUC01',
         description: 'Aqara EU smart plug',
         vendor: 'Xiaomi',
-        fromZigbee: [fz.on_off, fz.xiaomi_switch_basic, fz.electrical_measurement],
+        fromZigbee: [fz.on_off, fz.xiaomi_switch_basic, fz.electrical_measurement, fz.metering,
+            fz.xiaomi_switch_opple_basic, fz.xiaomi_power, fz.device_temperature],
         toZigbee: [tz.on_off],
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
-            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'haElectricalMeasurement']);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
             await reporting.onOff(endpoint);
+
+            // Not all plugs support electricity measurements:
+            // - https://github.com/Koenkk/zigbee2mqtt/issues/6861
+            // - https://github.com/Koenkk/zigbee-herdsman-converters/issues/1050#issuecomment-673111969
+            // Voltage and current are not supported:
+            // - https://github.com/Koenkk/zigbee-herdsman-converters/issues/1050
             try {
+                await reporting.bind(endpoint, coordinatorEndpoint, ['haElectricalMeasurement']);
                 await endpoint.read('haElectricalMeasurement', ['acPowerMultiplier', 'acPowerDivisor']);
-                await reporting.activePower(endpoint);
             } catch (e) {
-                // Not all plugs support this.
-                // https://github.com/Koenkk/zigbee-herdsman-converters/issues/1050#issuecomment-673111969
+                logger.warn(`SP-EUC01 failed to setup electricity measurements (${e.message})`);
+                logger.debug(e.stack);
+            }
+            try {
+                await reporting.bind(endpoint, coordinatorEndpoint, ['seMetering']);
+                await reporting.readMeteringMultiplierDivisor(endpoint);
+                await reporting.currentSummDelivered(endpoint, {change: 0});
+            } catch (e) {
+                logger.warn(`SP-EUC01 failed to setup metering (${e.message})`);
+                logger.debug(e.stack);
+            }
+        },
+        onEvent: async (type, data, device) => {
+            const switchEndpoint = device.getEndpoint(1);
+            if (switchEndpoint == null) {
+                return;
             }
 
-            // Voltage/current doesn't seem to be supported, maybe in futurue revisions of the device (?).
-            // https://github.com/Koenkk/zigbee-herdsman-converters/issues/1050
+            // This device doesn't support temperature reporting.
+            // Therefore we read the temperature every 30 min.
+            if (type === 'stop') {
+                clearInterval(globalStore.getValue(device, 'interval'));
+                globalStore.clearValue(device, 'interval');
+            } else if (!globalStore.hasValue(device, 'interval')) {
+                const interval = setInterval(async () => {
+                    try {
+                        await switchEndpoint.read('genDeviceTempCfg', ['currentTemperature']);
+                    } catch (error) {
+                        // Do nothing
+                    }
+                }, 1800000);
+                globalStore.putValue(device, 'interval', interval);
+            }
         },
-        exposes: [e.switch(), e.power(), e.energy(), e.temperature().withAccess(ea.STATE), e.voltage().withAccess(ea.STATE), e.current()],
+        exposes: [e.switch(), e.power(), e.energy(),
+            e.device_temperature().withDescription('Device temperature (polled every 30 min)')],
         ota: ota.zigbeeOTA,
     },
     {
@@ -893,9 +929,11 @@ module.exports = [
         fromZigbee: [fz.on_off, fz.xiaomi_power, fz.ignore_occupancy_report, fz.xiaomi_switch_basic],
         toZigbee: [tz.on_off, tz.xiaomi_power, tz.xiaomi_led_disabled_night,
             tz.xiaomi_switch_power_outage_memory, tz.xiaomi_auto_off],
-        exposes: [e.switch(), e.power().withAccess(ea.STATE_GET), e.energy(), e.temperature(), e.power_outage_memory(),
-            e.voltage().withAccess(ea.STATE), e.led_disabled_night().withAccess(ea.STATE_SET),
-            exposes.binary('auto_off', ea.STATE_SET, true, false)],
+        exposes: [e.switch(), e.power().withAccess(ea.STATE_GET), e.energy(), e.temperature(), e.voltage().withAccess(ea.STATE),
+            e.power_outage_memory(), e.led_disabled_night(),
+            exposes.binary('auto_off', ea.STATE_SET, true, false)
+                .withDescription('If the power is constantly lower than 2W within half an hour, ' +
+                    'the plug will be automatically turned off')],
         onEvent: async (type, data, device) => {
             device.skipTimeResponse = true;
             // According to the Zigbee the genTime.time should be the seconds since 1 January 2020 UTC
@@ -1356,7 +1394,7 @@ module.exports = [
         model: 'QBKG39LM',
         vendor: 'Xiaomi',
         description: 'Aqara E1 2 gang switch (without neutral)',
-        fromZigbee: [fz.on_off, fz.xiaomi_multistate_action],
+        fromZigbee: [fz.on_off, fz.xiaomi_multistate_action, fz.xiaomi_switch_opple_basic],
         toZigbee: [tz.on_off, tz.xiaomi_switch_operation_mode_opple, tz.xiaomi_switch_power_outage_memory],
         meta: {multiEndpoint: true},
         endpoint: (device) => {
