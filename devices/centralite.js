@@ -154,7 +154,8 @@ module.exports = [
         exposes: [e.battery(), exposes.climate().withSetpoint('occupied_heating_setpoint', 10, 30, 1).withLocalTemperature()
             .withSystemMode(['off', 'heat', 'cool', 'emergency_heating'])
             .withRunningState(['idle', 'heat', 'cool', 'fan_only']).withFanMode(['auto', 'on'])
-            .withSetpoint('occupied_cooling_setpoint', 10, 30, 1).withLocalTemperatureCalibration()],
+            .withSetpoint('occupied_cooling_setpoint', 10, 30, 1).withLocalTemperatureCalibration()
+            .withControlSequenceOfOperation(['cooling_only', 'heating_only', 'cooling_and_heating_4-pipes'])],
         meta: {battery: {voltageToPercentage: '3V_1500_2800'}},
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
@@ -163,6 +164,7 @@ module.exports = [
             await reporting.thermostatRunningState(endpoint);
             await reporting.thermostatTemperature(endpoint);
             await reporting.fanMode(endpoint);
+            device.powerSource = 'Mains (single phase)';
         },
     },
     {
