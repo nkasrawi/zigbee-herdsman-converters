@@ -42,6 +42,10 @@ const converters = {
                 result[postfixWithEndpointName('local_temperature_calibration', msg, model)] =
                     precisionRound(msg.data['localTemperatureCalibration'], 2) / 10;
             }
+            if (msg.data.hasOwnProperty('occupiedSetback')) {
+                result[postfixWithEndpointName('occupied_setback', msg, model)] =
+                    precisionRound(msg.data['occupiedSetback'], 2) / 10;
+            }
             if (msg.data.hasOwnProperty('occupancy')) {
                 result[postfixWithEndpointName('occupancy', msg, model)] = (msg.data.occupancy % 2) > 0;
             }

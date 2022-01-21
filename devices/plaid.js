@@ -11,11 +11,12 @@ module.exports = [
         vendor: 'PLAID SYSTEMS',
         description: 'Spruce temperature and moisture sensor',
         toZigbee: [],
-        fromZigbee: [fz.temperature, fz.humidity],
-        exposes: [e.humidity(), e.temperature()],
+        fromZigbee: [fz.battery, fz.temperature, fz.humidity],
+        exposes: [e.battery(), e.humidity(), e.temperature()],
+        meta: {battery: {voltageToPercentage: '3V_2500'}},
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
-            await reporting.bind(endpoint, coordinatorEndpoint, ['msTemperatureMeasurement', 'msRelativeHumidity']);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genPowerCfg', 'msTemperatureMeasurement', 'msRelativeHumidity']);
             await reporting.temperature(endpoint);
             await reporting.humidity(endpoint);
         },

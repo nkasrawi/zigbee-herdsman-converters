@@ -1206,6 +1206,16 @@ const converters = {
             await entity.read('hvacThermostat', ['localTemperatureCalibration']);
         },
     },
+    thermostat_occupied_setback: {
+        key: ['occupied_setback'],
+        convertSet: async (entity, key, value, meta) => {
+            await entity.write('hvacThermostat', {occupiedSetback: Math.round(value * 10)});
+            return {state: {occupied_setback: value}};
+        },
+        convertGet: async (entity, key, meta) => {
+            await entity.read('hvacThermostat', ['occupiedSetback']);
+        },
+    },
     thermostat_occupancy: {
         key: ['occupancy'],
         convertGet: async (entity, key, meta) => {
