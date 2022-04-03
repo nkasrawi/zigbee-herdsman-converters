@@ -19,6 +19,13 @@ module.exports = [
         extend: extend.switch(),
     },
     {
+        zigbeeModel: ['50131'],
+        model: '501.31',
+        vendor: 'Paulmann',
+        description: 'Smart plug for Euro- and Schuko-sockets',
+        extend: extend.switch(),
+    },
+    {
         zigbeeModel: ['Dimmablelight '],
         model: '50044/50045',
         vendor: 'Paulmann',
@@ -82,8 +89,15 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
+        zigbeeModel: ['371232040'],
+        model: '371232040',
+        vendor: 'Paulmann',
+        description: 'LED panels',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 350]}),
+    },
+    {
         zigbeeModel: ['500.45'],
-        model: '798.15',
+        model: '500.45',
         vendor: 'Paulmann',
         description: 'SmartHome Zigbee Pendulum Light Aptare',
         extend: extend.light_onoff_brightness(),

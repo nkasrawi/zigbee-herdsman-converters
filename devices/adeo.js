@@ -7,7 +7,47 @@ const e = exposes.presets;
 
 module.exports = [
     {
-        zigbeeModel: ['LXEK-5'],
+        zigbeeModel: ['ZBEK-4'],
+        model: 'IM-CDZDGAAA0005KA8MAN',
+        vendor: 'ADEO',
+        description: 'ENKI LEXMAN RGBTW GU10 Bulb',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 370]}),
+    },
+    {
+        zigbeeModel: ['ZBEK-12'],
+        model: 'IA-CDZFB2AA007NA-MZN-01',
+        vendor: 'ADEO',
+        description: 'ENKI LEXMAN E27 LED white',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 454]}),
+    },
+    {
+        zigbeeModel: ['ZBEK-13'],
+        model: 'IG-CDZFB2AG010RA-MNZ',
+        vendor: 'ADEO',
+        description: 'ENKI LEXMAN E27 LED white',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 454]}),
+    },
+    {
+        zigbeeModel: ['ZBEK-3'],
+        model: 'IP-CDZOTAAP005JA-MAN',
+        vendor: 'ADEO',
+        description: 'ENKI LEXMAN E14 LED RGBW',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 370]}),
+    },
+    {
+        zigbeeModel: ['LDSENK01F'],
+        model: 'LDSENK01F',
+        vendor: 'ADEO',
+        description: '10A EU smart plug',
+        extend: extend.switch(),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['LXEK-5', 'ZBEK-26'],
         model: 'HR-C99C-Z-C045',
         vendor: 'ADEO',
         description: 'RGB CTT LEXMAN ENKI remote control',
@@ -53,6 +93,13 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
+        zigbeeModel: ['ZBEK-2'],
+        model: 'IG-CDZOTAAG014RA-MAN',
+        vendor: 'ADEO',
+        description: 'ENKI Lexman E27 14W to 100W LED RGBW v2',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 370]}),
+    },
+    {
         zigbeeModel: ['LXEK-7'],
         model: '9CZA-A806ST-Q1Z',
         vendor: 'ADEO',
@@ -75,5 +122,14 @@ module.exports = [
             await reporting.readMeteringMultiplierDivisor(endpoint);
         },
         exposes: [e.power(), e.switch(), e.energy()],
+    },
+    {
+        zigbeeModel: ['LDSENK10'],
+        model: 'LDSENK10',
+        vendor: 'ADEO',
+        description: 'LEXMAN motion sensor',
+        fromZigbee: [fz.ias_occupancy_alarm_1],
+        toZigbee: [],
+        exposes: [e.occupancy(), e.battery_low(), e.tamper()],
     },
 ];

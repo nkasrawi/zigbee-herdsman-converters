@@ -20,9 +20,10 @@ module.exports = [
         model: '3RSS008Z',
         vendor: 'Third Reality',
         description: 'RealitySwitch Plus',
-        fromZigbee: [fz.on_off],
+        fromZigbee: [fz.on_off, fz.battery],
         toZigbee: [tz.on_off, tz.ignore_transition],
-        exposes: [e.switch()],
+        meta: {battery: {voltageToPercentage: '3V_2100'}},
+        exposes: [e.switch(), e.battery(), e.battery_voltage()],
     },
     {
         zigbeeModel: ['3RSS007Z'],
@@ -60,6 +61,10 @@ module.exports = [
         meta: {battery: {dontDividePercentage: true}},
         toZigbee: [],
         exposes: [e.water_leak(), e.battery_low(), e.battery(), e.battery_voltage()],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            device.powerSource = 'Battery';
+            device.save();
+        },
     },
     {
         zigbeeModel: ['3RMS16BZ'],
@@ -80,5 +85,17 @@ module.exports = [
         toZigbee: [],
         meta: {battery: {dontDividePercentage: true}},
         exposes: [e.contact(), e.battery_low(), e.battery(), e.battery_voltage()],
+    },
+    {
+        zigbeeModel: ['3RSP019BZ'],
+        model: '3RSP019BZ',
+        vendor: 'Third Reality',
+        description: 'Zigbee / BLE smart plug',
+        extend: extend.switch(),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint);
+        },
     },
 ];

@@ -5,6 +5,7 @@ const constants = require('../lib/constants');
 const reporting = require('../lib/reporting');
 const extend = require('../lib/extend');
 const ea = exposes.access;
+const e = exposes.presets;
 
 module.exports = [
     {
@@ -22,16 +23,34 @@ module.exports = [
         },
     },
     {
+        zigbeeModel: ['ElkoDimmerRemoteZHA'],
+        model: 'EKO05806',
+        vendor: 'ELKO',
+        description: 'Elko ESH 316 Endevender RF',
+        fromZigbee: [fz.command_toggle, fz.command_step],
+        toZigbee: [],
+        exposes: [e.action(['toggle', 'brightness_step_up', 'brightness_step_down'])],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl']);
+            await reporting.onOff(endpoint);
+        },
+    },
+    {
         zigbeeModel: ['Super TR'],
         model: '4523430',
         vendor: 'ELKO',
         description: 'ESH Plus Super TR RF PH',
         fromZigbee: [fz.elko_thermostat, fz.thermostat],
-        toZigbee: [tz.thermostat_occupied_heating_setpoint, tz.thermostat_occupied_heating_setpoint,
+        toZigbee: [tz.thermostat_occupied_heating_setpoint, tz.thermostat_occupied_heating_setpoint, tz.elko_load,
             tz.elko_display_text, tz.elko_power_status, tz.elko_external_temp, tz.elko_mean_power, tz.elko_child_lock, tz.elko_frost_guard,
             tz.elko_relay_state, tz.elko_sensor_mode, tz.elko_local_temperature_calibration, tz.elko_max_floor_temp,
             tz.elko_regulator_mode, tz.elko_regulator_time, tz.elko_night_switching],
         exposes: [exposes.text('display_text', ea.ALL).withDescription('Displayed text on thermostat display (zone). Max 14 characters'),
+            exposes.numeric('load', ea.ALL).withUnit('W')
+                .withDescription('Load in W when heating is on (between 0-2000 W). The thermostat uses the value as input to the ' +
+                'mean_power calculation.')
+                .withValueMin(0).withValueMax(2000),
             exposes.binary('regulator_mode', ea.ALL, 'regulator', 'thermostat')
                 .withDescription('Device in regulator or thermostat mode.'),
             exposes.numeric('regulator_time', ea.ALL).withUnit('min')
@@ -41,7 +60,7 @@ module.exports = [
                 '(quick) wooden floors.'),
             exposes.climate().withSetpoint('occupied_heating_setpoint', 5, 50, 1)
                 .withLocalTemperature(ea.STATE)
-                .withLocalTemperatureCalibration()
+                .withLocalTemperatureCalibration(-30, 30, 0.1)
                 .withSystemMode(['off', 'heat']).withRunningState(['idle', 'heat'])
                 .withSensor(['air', 'floor', 'supervisor_floor']),
             exposes.numeric('floor_temp', ea.STATE_GET).withUnit('°C')
@@ -69,6 +88,13 @@ module.exports = [
             await reporting.thermostatOccupiedHeatingSetpoint(endpoint);
 
             // ELKO attributes
+            // Load value
+            await endpoint.configureReporting('hvacThermostat', [{
+                attribute: 'elkoLoad',
+                minimumReportInterval: 0,
+                maximumReportInterval: constants.repInterval.HOUR,
+                reportableChange: null,
+            }]);
             // Power status
             await endpoint.configureReporting('hvacThermostat', [{
                 attribute: 'elkoPowerStatus',

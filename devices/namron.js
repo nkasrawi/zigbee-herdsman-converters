@@ -1,7 +1,10 @@
 const exposes = require('../lib/exposes');
 const fz = {...require('../converters/fromZigbee'), legacy: require('../lib/legacy').fromZigbee};
+const tz = require('../converters/toZigbee');
+const constants = require('../lib/constants');
 const reporting = require('../lib/reporting');
 const extend = require('../lib/extend');
+const ea = exposes.access;
 const e = exposes.presets;
 
 module.exports = [
@@ -17,6 +20,19 @@ module.exports = [
         model: '4512700',
         vendor: 'Namron',
         description: 'ZigBee dimmer 400W',
+        extend: extend.light_onoff_brightness({noConfigure: true}),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness().configure(device, coordinatorEndpoint, logger);
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl']);
+            await reporting.onOff(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['4512733'],
+        model: '4512733',
+        vendor: 'Namron',
+        description: 'ZigBee dimmer 2-pol 400W',
         extend: extend.light_onoff_brightness({noConfigure: true}),
         configure: async (device, coordinatorEndpoint, logger) => {
             await extend.light_onoff_brightness().configure(device, coordinatorEndpoint, logger);
@@ -185,12 +201,33 @@ module.exports = [
         },
     },
     {
+        zigbeeModel: ['3802960'],
+        model: '3802960',
+        vendor: 'Namron',
+        description: 'LED 9W DIM E27',
+        extend: extend.light_onoff_brightness(),
+    },
+    {
+        zigbeeModel: ['3802961'],
+        model: '3802961',
+        vendor: 'Namron',
+        description: 'LED 9W CCT E27',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 370]}),
+    },
+    {
         zigbeeModel: ['3802962'],
         model: '3802962',
         vendor: 'Namron',
         description: 'LED 9W RGBW E27',
         meta: {turnsOffAtBrightness1: true},
         extend: extend.light_onoff_brightness_colortemp_color(),
+    },
+    {
+        zigbeeModel: ['3802963'],
+        model: '3802963',
+        vendor: 'Namron',
+        description: 'LED 5,3W DIM E14',
+        extend: extend.light_onoff_brightness(),
     },
     {
         zigbeeModel: ['3802964'],
@@ -200,11 +237,80 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp(),
     },
     {
+        zigbeeModel: ['3802965'],
+        model: '3802965',
+        vendor: 'Namron',
+        description: 'LED 4,8W DIM GU10',
+        extend: extend.light_onoff_brightness(),
+    },
+    {
+        zigbeeModel: ['3802966'],
+        model: '3802966',
+        vendor: 'Namron',
+        description: 'LED 4.8W CCT GU10',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 370]}),
+    },
+    {
         zigbeeModel: ['89665'],
         model: '89665',
         vendor: 'Namron',
         description: 'LED Strip RGB+W (5m) IP20',
         meta: {turnsOffAtBrightness1: true},
         extend: extend.light_onoff_brightness_colortemp_color(),
+    },
+    {
+        zigbeeModel: ['4512737'],
+        model: '4512737',
+        vendor: 'Namron',
+        description: 'Touch termostat',
+        fromZigbee: [fz.thermostat, fz.metering, fz.electrical_measurement, fz.hvac_user_interface],
+        toZigbee: [tz.thermostat_occupied_heating_setpoint, tz.thermostat_unoccupied_heating_setpoint, tz.thermostat_occupancy,
+            tz.thermostat_local_temperature_calibration, tz.thermostat_local_temperature, tz.thermostat_outdoor_temperature,
+            tz.thermostat_system_mode, tz.thermostat_control_sequence_of_operation, tz.thermostat_running_state,
+            tz.thermostat_keypad_lockout],
+        exposes: [
+            e.local_temperature(),
+            exposes.numeric('outdoor_temperature', ea.STATE_GET).withUnit('°C')
+                .withDescription('Current temperature measured from the floor sensor'),
+            e.keypad_lockout(),
+            exposes.climate()
+                .withSetpoint('occupied_heating_setpoint', 5, 50, 0.01)
+                .withLocalTemperature()
+                .withLocalTemperatureCalibration(-30, 30, 0.1)
+                .withSystemMode(['off', 'auto', 'heat'])
+                .withRunningState(['idle', 'heat']),
+            e.power(), e.current(), e.voltage(), e.energy(),
+        ],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            const binds = [
+                'genBasic', 'genIdentify', 'genGroups', 'genScenes', 'hvacThermostat',
+                'seMetering', 'haElectricalMeasurement', 'genAlarms', 'msOccupancySensing', 'genTime', 'hvacUserInterfaceCfg',
+            ];
+            await reporting.bind(endpoint, coordinatorEndpoint, binds);
+
+            // standard ZCL attributes
+            await reporting.thermostatTemperature(endpoint);
+            await reporting.thermostatOccupiedHeatingSetpoint(endpoint);
+            await reporting.thermostatUnoccupiedHeatingSetpoint(endpoint);
+            await reporting.thermostatKeypadLockMode(endpoint);
+
+            await endpoint.configureReporting('hvacThermostat', [{
+                attribute: 'ocupancy',
+                minimumReportInterval: 0,
+                maximumReportInterval: constants.repInterval.HOUR,
+                reportableChange: null,
+            }]);
+
+            await reporting.activePower(endpoint);
+            await reporting.currentSummDelivered(endpoint);
+            await reporting.readMeteringMultiplierDivisor(endpoint);
+            await reporting.rmsCurrent(endpoint);
+            await reporting.rmsVoltage(endpoint);
+            await reporting.readMeteringMultiplierDivisor(endpoint);
+
+            // Trigger read
+            await endpoint.read('hvacThermostat', ['systemMode', 'runningState', 'occupied_heating_setpoint']);
+        },
     },
 ];
