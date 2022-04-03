@@ -42,6 +42,10 @@ const converters = {
                 result[postfixWithEndpointName('local_temperature_calibration', msg, model)] =
                     precisionRound(msg.data['localTemperatureCalibration'], 2) / 10;
             }
+            if (msg.data.hasOwnProperty('occupiedSetback')) {
+                result[postfixWithEndpointName('occupied_setback', msg, model)] =
+                    precisionRound(msg.data['occupiedSetback'], 2) / 10;
+            }
             if (msg.data.hasOwnProperty('occupancy')) {
                 result[postfixWithEndpointName('occupancy', msg, model)] = (msg.data.occupancy % 2) > 0;
             }
@@ -2660,6 +2664,22 @@ const converters = {
                 voltage: voltage, // @deprecated
                 // voltage: voltage / 1000.0,
             };
+        },
+    },
+    plaid_battery: {
+        cluster: 'genPowerCfg',
+        type: ['readResponse', 'attributeReport'],
+        convert: (model, msg, publish, options, meta) => {
+            const payload = {};
+            if (msg.data.hasOwnProperty('mainsVoltage')) {
+                // Deprecated: voltage is = mV now but should be V
+                payload.voltage = msg.data['mainsVoltage'];
+
+                if (model.meta && model.meta.battery && model.meta.battery.voltageToPercentage) {
+                    payload.battery = batteryVoltageToPercentage(payload.voltage, model.meta.battery.voltageToPercentage);
+                }
+            }
+            return payload;
         },
     },
     silvercrest_smart_led_string: {
