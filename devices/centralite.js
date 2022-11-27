@@ -225,9 +225,9 @@ module.exports = [
                 .withRunningState(['idle', 'heat', 'cool', 'fan_only', 'aux_heat', 'heat_no_fan']).withFanMode(['auto', 'on'])
                 .withSetpoint('occupied_cooling_setpoint', 7, 30, 1)
                 .withOccupiedSetback()
-                .withLocalTemperatureCalibration(-2.5, 2.5, 0.1)],
+                .withLocalTemperatureCalibration(-2.5, 2.5, 0.1)
                 .withControlSequenceOfOperation(['cooling_only', 'heating_only', 'cooling_and_heating_4-pipes'])
-                .withRunningMode(['off', 'heat', 'cool'])
+                .withRunningMode(['off', 'heat', 'cool'])],
         meta: {battery: {voltageToPercentage: '3V_1500_2800'}},
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
