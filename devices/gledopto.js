@@ -2,6 +2,7 @@ const exposes = require('../lib/exposes');
 const globalStore = require('../lib/store');
 const ota = require('../lib/ota');
 const extend = require('../lib/extend');
+const reporting = require('../lib/reporting');
 const utils = require('../lib/utils');
 const tz = require('../converters/toZigbee');
 const e = exposes.presets;
@@ -39,6 +40,37 @@ const gledoptoExtend = {
             [tz.gledopto_light_onoff_brightness, tz.gledopto_light_color_colortemp],
         ),
     }),
+    switch: (options={}) => ({
+        ...extend.switch(options),
+        onEvent: async (type, data, device) => {
+            // This device doesn't support reporting.
+            // Therefore we read the on/off state every 5 seconds.
+            // This is the same way as the Hue bridge does it.
+            if (type === 'stop') {
+                clearInterval(globalStore.getValue(device, 'interval'));
+                globalStore.clearValue(device, 'interval');
+            } else if (!globalStore.hasValue(device, 'interval')) {
+                const interval = setInterval(async () => {
+                    try {
+                        await device.endpoints[0].read('genOnOff', ['onOff']);
+                    } catch (error) {
+                        // Do nothing
+                    }
+                }, 5000);
+                globalStore.putValue(device, 'interval', interval);
+            }
+        },
+    }),
+};
+
+const configureReadModelID = async (device, coordinatorEndpoint, logger) => {
+    // https://github.com/Koenkk/zigbee-herdsman-converters/issues/3016#issuecomment-1027726604
+    const endpoint = device.endpoints[0];
+    const oldModel = device.modelID;
+    const newModel = (await endpoint.read('genBasic', ['modelId'])).modelId;
+    if (oldModel != newModel) {
+        logger.info(`Detected Gledopto device mode change, from '${oldModel}' to '${newModel}'`);
+    }
 };
 
 module.exports = [
@@ -67,6 +99,7 @@ module.exports = [
         vendor: 'Gledopto',
         description: 'Zigbee triac AC dimmer',
         extend: gledoptoExtend.light_onoff_brightness(),
+        meta: {disableDefaultResponse: true},
     },
     {
         zigbeeModel: ['GL-C-006'],
@@ -94,7 +127,19 @@ module.exports = [
         vendor: 'Gledopto',
         ota: ota.zigbeeOTA,
         description: 'Zigbee LED Controller WW/CW (pro)',
-        extend: gledoptoExtend.light_onoff_brightness_colortemp(),
+        extend: gledoptoExtend.light_onoff_brightness_colortemp({noConfigure: true}),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness_colortemp().configure(device, coordinatorEndpoint, logger);
+            await configureReadModelID(device, coordinatorEndpoint, logger);
+        },
+    },
+    {
+        zigbeeModel: ['GL-G-003P'],
+        model: 'GL-G-003P',
+        vendor: 'Gledopto',
+        ota: ota.zigbeeOTA,
+        description: '7W garden light pro',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
     },
     {
         fingerprint: [
@@ -157,7 +202,11 @@ module.exports = [
         vendor: 'Gledopto',
         ota: ota.zigbeeOTA,
         description: 'Zigbee LED Controller RGBW (pro)',
-        extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({noConfigure: true}),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness_colortemp_color().configure(device, coordinatorEndpoint, logger);
+            await configureReadModelID(device, coordinatorEndpoint, logger);
+        },
     },
     {
         fingerprint: [
@@ -210,13 +259,30 @@ module.exports = [
         meta: {disableDefaultResponse: true},
     },
     {
+        zigbeeModel: ['GL-C-003P'],
+        model: 'GL-C-003P',
+        vendor: 'Gledopto',
+        ota: ota.zigbeeOTA,
+        description: 'Zigbee LED Controller RGB (pro)',
+        extend: gledoptoExtend.light_onoff_brightness_color({noConfigure: true}),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness_color().configure(device, coordinatorEndpoint, logger);
+            await configureReadModelID(device, coordinatorEndpoint, logger);
+        },
+    },
+    {
         zigbeeModel: ['GL-C-008P'],
         model: 'GL-C-008P',
         vendor: 'Gledopto',
         ota: ota.zigbeeOTA,
         description: 'Zigbee LED Controller RGB+CCT (pro)',
-        extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
+        whiteLabel: [{vendor: 'Gledopto', model: 'GL-C-001P'}, {vendor: 'Gledopto', model: 'GL-C-002P'}],
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495], noConfigure: true}),
         meta: {disableDefaultResponse: true},
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness_colortemp_color().configure(device, coordinatorEndpoint, logger);
+            await configureReadModelID(device, coordinatorEndpoint, logger);
+        },
     },
     {
         zigbeeModel: ['GL-C-009'],
@@ -237,7 +303,11 @@ module.exports = [
         vendor: 'Gledopto',
         ota: ota.zigbeeOTA,
         description: 'Zigbee LED Controller W (pro)',
-        extend: gledoptoExtend.light_onoff_brightness(),
+        extend: gledoptoExtend.light_onoff_brightness({noConfigure: true}),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness().configure(device, coordinatorEndpoint, logger);
+            await configureReadModelID(device, coordinatorEndpoint, logger);
+        },
     },
     {
         zigbeeModel: ['GL-C-009S'],
@@ -253,6 +323,20 @@ module.exports = [
         description: 'Zigbee USB Mini LED Controller RGB+CCT',
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
         meta: {disableDefaultResponse: true},
+    },
+    {
+        zigbeeModel: ['GL-B-002P'],
+        model: 'GL-B-002P',
+        vendor: 'Gledopto',
+        description: 'Zigbee smart filament LED bulb',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
+    },
+    {
+        zigbeeModel: ['GL-S-006P'],
+        model: 'GL-S-006P',
+        vendor: 'Gledopto',
+        description: 'Zigbee GU10 LED lamp',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
     },
     {
         zigbeeModel: ['GL-MC-001P'],
@@ -280,7 +364,7 @@ module.exports = [
         model: 'GL-S-004Z',
         vendor: 'Gledopto',
         description: 'Zigbee 4W MR16 Bulb 30deg RGB+CCT',
-        extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({disableColorTempStartup: false, colorTempRange: [155, 495]}),
     },
     {
         zigbeeModel: ['GL-S-005Z'],
@@ -305,7 +389,7 @@ module.exports = [
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
     },
     {
-        zigbeeModel: ['GL-S-007Z'],
+        zigbeeModel: ['GL-S-007Z', 'GL-S-007Z(lk)'],
         model: 'GL-S-007Z',
         vendor: 'Gledopto',
         description: 'Zigbee 5W GU10 Bulb RGB+CCT',
@@ -400,6 +484,14 @@ module.exports = [
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
     },
     {
+        zigbeeModel: ['GL-D-002P'],
+        model: 'GL-D-002P',
+        vendor: 'Gledopto',
+        ota: ota.zigbeeOTA,
+        description: 'Zigbee 6W Downlight RGB+CCT (pro CRI>90)',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
+    },
+    {
         zigbeeModel: ['GL-D-003Z'],
         model: 'GL-D-003Z',
         vendor: 'Gledopto',
@@ -463,7 +555,22 @@ module.exports = [
         vendor: 'Gledopto',
         ota: ota.zigbeeOTA,
         description: 'Zigbee 12W Downlight RGB+CCT (pro)',
-        extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
+    },
+    {
+        zigbeeModel: ['GL-D-006P'],
+        model: 'GL-D-006P',
+        vendor: 'Gledopto',
+        ota: ota.zigbeeOTA,
+        description: 'Zigbee 6W anti-glare downlight RGB+CCT (pro)',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
+    },
+    {
+        zigbeeModel: ['GL-D-007P'],
+        model: 'GL-D-007P',
+        vendor: 'Gledopto',
+        description: 'Zigbee 12W anti-glare downlight RGB+CCT (pro)',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
     },
     {
         zigbeeModel: ['GL-FL-004TZ'],
@@ -471,6 +578,13 @@ module.exports = [
         vendor: 'Gledopto',
         description: 'Zigbee 10W Floodlight RGB+CCT',
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
+    },
+    {
+        zigbeeModel: ['GL-B-003P'],
+        model: 'GL-B-003P',
+        vendor: 'Gledopto',
+        description: 'Zigbee 7W E26/E27 Bulb RGB+CCT (pro)',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [155, 495]}),
     },
     {
         zigbeeModel: ['GL-FL-004TZS'],
@@ -486,6 +600,29 @@ module.exports = [
         ota: ota.zigbeeOTA,
         description: 'Zigbee 10W Floodlight RGB+CCT (pro)',
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
+    },
+    {
+        zigbeeModel: ['GL-C-004P'],
+        model: 'GL-C-004P',
+        vendor: 'Gledopto',
+        description: 'Zigbee LED Strip Light Kit',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp({noConfigure: true, colorTempRange: [158, 495]}),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            await extend.light_onoff_brightness_colortemp().configure(device, coordinatorEndpoint, logger);
+            const endpoint = device.getEndpoint(11);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'lightingColorCtrl']);
+            await reporting.onOff(endpoint);
+            await reporting.brightness(endpoint);
+            await reporting.colorTemperature(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['GL-FL-001P'],
+        model: 'GL-FL-001P',
+        vendor: 'Gledopto',
+        ota: ota.zigbeeOTA,
+        description: 'Zigbee 10W Floodlight RGB+CCT 12V Low Voltage (pro)',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
     },
     {
         zigbeeModel: ['GL-FL-005TZ'],
@@ -554,35 +691,39 @@ module.exports = [
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
     },
     {
+        zigbeeModel: ['GL-G-002P'],
+        model: 'GL-G-002P',
+        vendor: 'Gledopto',
+        ota: ota.zigbeeOTA,
+        description: 'Zigbee 7W garden lamp RGB+CCT (pro)',
+        extend: gledoptoExtend.light_onoff_brightness_colortemp_color({colorTempRange: [150, 500]}),
+    },
+    {
         zigbeeModel: ['GL-G-007Z'],
         model: 'GL-G-007Z',
         vendor: 'Gledopto',
-        description: 'Zigbee 9W Garden Lamp RGB+CCT',
+        description: 'Zigbee 9W garden lamp RGB+CCT',
         extend: gledoptoExtend.light_onoff_brightness_colortemp_color(),
     },
     {
         zigbeeModel: ['GL-W-001Z'],
         model: 'GL-W-001Z',
         vendor: 'Gledopto',
-        description: 'Zigbee On/Off Wall Switch',
-        extend: extend.switch(),
-        onEvent: async (type, data, device) => {
-            // This device doesn't support reporting.
-            // Therefore we read the on/off state every 5 seconds.
-            // This is the same way as the Hue bridge does it.
-            if (type === 'stop') {
-                clearInterval(globalStore.getValue(device, 'interval'));
-                globalStore.clearValue(device, 'interval');
-            } else if (!globalStore.hasValue(device, 'interval')) {
-                const interval = setInterval(async () => {
-                    try {
-                        await device.endpoints[0].read('genOnOff', ['onOff']);
-                    } catch (error) {
-                        // Do nothing
-                    }
-                }, 5000);
-                globalStore.putValue(device, 'interval', interval);
-            }
-        },
+        description: 'Zigbee on/off wall switch',
+        extend: gledoptoExtend.switch(),
+    },
+    {
+        zigbeeModel: ['GL-SD-002'],
+        model: 'GL-SD-002',
+        vendor: 'Gledopto',
+        description: 'Zigbee 3.0 smart home switch',
+        extend: gledoptoExtend.switch(),
+    },
+    {
+        zigbeeModel: ['GL-B-004P'],
+        model: 'GL-B-004P',
+        vendor: 'Gledopto',
+        description: 'Filament LED light bulb E27 G95 7W pro',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [158, 495]}),
     },
 ];

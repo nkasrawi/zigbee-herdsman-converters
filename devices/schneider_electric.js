@@ -4,10 +4,206 @@ const tz = require('../converters/toZigbee');
 const constants = require('../lib/constants');
 const reporting = require('../lib/reporting');
 const extend = require('../lib/extend');
+const utils = require('../lib/utils');
 const e = exposes.presets;
 const ea = exposes.access;
 
+const tzLocal = {
+    lift_duration: {
+        key: ['lift_duration'],
+        convertSet: async (entity, key, value, meta) => {
+            await entity.write(0x0102, {0xe000: {value, type: 0x21}}, {manufacturerCode: 0x105e});
+            return {state: {lift_duration: value}};
+        },
+    },
+};
+
+const fzLocal = {
+    schneider_powertag: {
+        cluster: 'greenPower',
+        type: ['commandNotification', 'commandCommisioningNotification'],
+        convert: async (model, msg, publish, options, meta) => {
+            if (msg.type !== 'commandNotification') {
+                return;
+            }
+
+            const commandID = msg.data.commandID;
+            if (utils.hasAlreadyProcessedMessage(msg, model, msg.data.frameCounter, `${msg.device.ieeeAddr}_${commandID}`)) return;
+
+            const rxAfterTx = (msg.data.options & (1<<11));
+            const ret = {};
+
+            switch (commandID) {
+            case 0xA1: {
+                const attr = msg.data.commandFrame.attributes;
+                const clusterID = msg.data.commandFrame.clusterID;
+
+                switch (clusterID) {
+                case 2820: { // haElectricalMeasurement
+                    const acCurrentDivisor = attr['acCurrentDivisor'];
+                    const acVoltageDivisor = attr['acVoltageDivisor'];
+                    const acFrequencyDivisor = attr['acFrequencyDivisor'];
+                    const powerDivisor = attr['powerDivisor'];
+
+                    if (attr.hasOwnProperty('rmsVoltage')) {
+                        ret['voltage_phase_a'] = attr['rmsVoltage'] / acVoltageDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('rmsVoltagePhB')) {
+                        ret['voltage_phase_b'] = attr['rmsVoltagePhB'] / acVoltageDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('rmsVoltagePhC')) {
+                        ret['voltage_phase_c'] = attr['rmsVoltagePhC'] / acVoltageDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('19200')) {
+                        ret['voltage_phase_ab'] = attr['19200'] / acVoltageDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('19456')) {
+                        ret['voltage_phase_bc'] = attr['19456'] / acVoltageDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('19712')) {
+                        ret['voltage_phase_ca'] = attr['19712'] / acVoltageDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('rmsCurrent')) {
+                        ret['current_phase_a'] = attr['rmsCurrent'] / acCurrentDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('rmsCurrentPhB')) {
+                        ret['current_phase_b'] = attr['rmsCurrentPhB'] / acCurrentDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('rmsCurrentPhC')) {
+                        ret['current_phase_c'] = attr['rmsCurrentPhC'] / acCurrentDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('totalActivePower')) {
+                        ret['power'] = attr['totalActivePower'] * 1000 / powerDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('totalApparentPower')) {
+                        ret['power_apparent'] = attr['totalApparentPower'] * 1000 / powerDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('acFrequency')) {
+                        ret['ac_frequency'] = attr['acFrequency'] / acFrequencyDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('activePower')) {
+                        ret['power_phase_a'] = attr['activePower'] * 1000 / powerDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('activePowerPhB')) {
+                        ret['power_phase_b'] = attr['activePowerPhB'] * 1000 / powerDivisor;
+                    }
+
+                    if (attr.hasOwnProperty('activePowerPhC')) {
+                        ret['power_phase_c'] = attr['activePowerPhC'] * 1000 / powerDivisor;
+                    }
+                    break;
+                }
+                case 1794: { // seMetering
+                    const divisor = attr['divisor'];
+
+                    if (attr.hasOwnProperty('currentSummDelivered')) {
+                        const val = attr['currentSummDelivered'];
+                        ret['energy'] = ((parseInt(val[0]) << 32) + parseInt(val[1])) / divisor;
+                    }
+
+                    if (attr.hasOwnProperty('16652')) {
+                        const val = attr['16652'];
+                        ret['energy_phase_a'] = ((parseInt(val[0]) << 32) + parseInt(val[1])) / divisor;
+                    }
+
+                    if (attr.hasOwnProperty('16908')) {
+                        const val = attr['16908'];
+                        ret['energy_phase_b'] = ((parseInt(val[0]) << 32) + parseInt(val[1])) / divisor;
+                    }
+
+                    if (attr.hasOwnProperty('17164')) {
+                        const val = attr['17164'];
+                        ret['energy_phase_c'] = ((parseInt(val[0]) << 32) + parseInt(val[1])) / divisor;
+                    }
+
+                    if (attr.hasOwnProperty('powerFactor')) {
+                        ret['power_factor'] = attr['powerFactor'];
+                    }
+
+                    break;
+                }
+                }
+
+                break;
+            }
+            case 0xA3:
+                // Should handle this cluster as well
+                break;
+            }
+
+            if (rxAfterTx) {
+                // Send Schneider specific ACK to make PowerTag happy
+                const networkParameters = await msg.device.zh.constructor.adapter.getNetworkParameters();
+                const payload = {
+                    options: 0b000,
+                    tempMaster: msg.data.gppNwkAddr,
+                    tempMasterTx: networkParameters.channel - 11,
+                    srcID: msg.data.srcID,
+                    gpdCmd: 0xFE,
+                    gpdPayload: {
+                        commandID: 0xFE,
+                        buffer: Buffer.alloc(1), // I hope it's zero initialised
+                    },
+                };
+
+                await msg.endpoint.commandResponse('greenPower', 'response', payload,
+                    {
+                        srcEndpoint: 242,
+                        disableDefaultResponse: true,
+                    });
+            }
+
+            return ret;
+        },
+    },
+};
+
 module.exports = [
+    {
+        zigbeeModel: ['PUCK/SHUTTER/1'],
+        model: 'CCT5015-0001',
+        vendor: 'Schneider Electric',
+        description: 'Roller shutter module',
+        fromZigbee: [fz.cover_position_tilt],
+        toZigbee: [tz.cover_position_tilt, tz.cover_state, tzLocal.lift_duration],
+        exposes: [e.cover_position(), exposes.numeric('lift_duration', ea.STATE_SET).withUnit('seconds')
+            .withValueMin(0).withValueMax(300).withDescription('Duration of lift')],
+        meta: {coverInverted: true},
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(5);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['closuresWindowCovering']);
+            await reporting.currentPositionLiftPercentage(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['NHPB/SHUTTER/1'],
+        model: 'S520567',
+        vendor: 'Schneider Electric',
+        description: 'Roller shutter',
+        fromZigbee: [fz.cover_position_tilt],
+        toZigbee: [tz.cover_position_tilt, tz.cover_state, tzLocal.lift_duration],
+        exposes: [e.cover_position(), exposes.numeric('lift_duration', ea.STATE_SET).withUnit('seconds')
+            .withValueMin(0).withValueMax(300).withDescription('Duration of lift')],
+        meta: {coverInverted: true},
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(5);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['closuresWindowCovering']);
+            await reporting.currentPositionLiftPercentage(endpoint);
+        },
+    },
     {
         zigbeeModel: ['iTRV'],
         model: 'WV704R0A0902',
@@ -17,15 +213,15 @@ module.exports = [
             fz.legacy.wiser_thermostat, fz.legacy.wiser_itrv_battery, fz.hvac_user_interface, fz.wiser_device_info],
         toZigbee: [tz.thermostat_occupied_heating_setpoint, tz.thermostat_keypad_lockout],
         exposes: [exposes.climate().withSetpoint('occupied_heating_setpoint', 7, 30, 1).withLocalTemperature(ea.STATE)
-            .withSystemMode(['off', 'auto', 'heat'], ea.STATE).withRunningState(['idle', 'heat'], ea.STATE).withPiHeatingDemand()],
+            .withRunningState(['idle', 'heat'], ea.STATE).withPiHeatingDemand()],
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
             const binds = ['genBasic', 'genPowerCfg', 'hvacThermostat', 'haDiagnostic'];
             await reporting.bind(endpoint, coordinatorEndpoint, binds);
             await reporting.batteryVoltage(endpoint);
-            await reporting.thermostatTemperature(endpoint, {min: 0, max: constants.repInterval.MINUTES_15, change: 25});
-            await reporting.thermostatOccupiedHeatingSetpoint(endpoint, {min: 0, max: constants.repInterval.MINUTES_15, change: 25});
-            await reporting.thermostatPIHeatingDemand(endpoint, {min: 0, max: constants.repInterval.MINUTES_15, change: 1});
+            await reporting.thermostatTemperature(endpoint);
+            await reporting.thermostatOccupiedHeatingSetpoint(endpoint);
+            await reporting.thermostatPIHeatingDemand(endpoint);
             // bind of hvacUserInterfaceCfg fails with 'Table Full', does this have any effect?
             await endpoint.configureReporting('hvacUserInterfaceCfg', [{attribute: 'keypadLockout', reportableChange: 1,
                 minimumReportInterval: constants.repInterval.MINUTE, maximumReportInterval: constants.repInterval.HOUR}]);
@@ -59,13 +255,15 @@ module.exports = [
         model: 'CCT5010-0001',
         vendor: 'Schneider Electric',
         description: 'Micro module dimmer',
-        fromZigbee: [fz.on_off, fz.brightness, fz.level_config, fz.lighting_ballast_configuration],
-        toZigbee: [tz.light_onoff_brightness, tz.level_config, tz.ballast_config],
+        fromZigbee: [...extend.light_onoff_brightness().fromZigbee, fz.wiser_lighting_ballast_configuration],
+        toZigbee: [...extend.light_onoff_brightness().toZigbee, tz.ballast_config, tz.wiser_dimmer_mode],
         exposes: [e.light_brightness().withLevelConfig(),
             exposes.numeric('ballast_minimum_level', ea.ALL).withValueMin(1).withValueMax(254)
                 .withDescription('Specifies the minimum light output of the ballast'),
             exposes.numeric('ballast_maximum_level', ea.ALL).withValueMin(1).withValueMax(254)
-                .withDescription('Specifies the maximum light output of the ballast')],
+                .withDescription('Specifies the maximum light output of the ballast'),
+            exposes.enum('dimmer_mode', ea.ALL, ['auto', 'rc', 'rl', 'rl_led'])
+                .withDescription('Sets dimming mode to autodetect or fixed RC/RL/RL_LED mode (max load is reduced in RL_LED)')],
         whiteLabel: [{vendor: 'Elko', model: 'EKO07090'}],
         configure: async (device, coordinatorEndpoint, logger) => {
             await extend.light_onoff_brightness().configure(device, coordinatorEndpoint, logger);
@@ -93,6 +291,27 @@ module.exports = [
         model: 'WDE002334',
         vendor: 'Schneider Electric',
         description: 'Rotary dimmer',
+        fromZigbee: [fz.on_off, fz.brightness, fz.level_config, fz.wiser_lighting_ballast_configuration],
+        toZigbee: [tz.light_onoff_brightness, tz.level_config, tz.ballast_config, tz.wiser_dimmer_mode],
+        exposes: [e.light_brightness().withLevelConfig(),
+            exposes.numeric('ballast_minimum_level', ea.ALL).withValueMin(1).withValueMax(254)
+                .withDescription('Specifies the minimum light output of the ballast'),
+            exposes.numeric('ballast_maximum_level', ea.ALL).withValueMin(1).withValueMax(254)
+                .withDescription('Specifies the maximum light output of the ballast'),
+            exposes.enum('dimmer_mode', ea.ALL, ['auto', 'rc', 'rl', 'rl_led'])
+                .withDescription('Sets dimming mode to autodetect or fixed RC/RL/RL_LED mode (max load is reduced in RL_LED)')],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(3);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'lightingBallastCfg']);
+            await reporting.onOff(endpoint);
+            await reporting.brightness(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['NHPB/DIMMER/1'],
+        model: 'WDE002386',
+        vendor: 'Schneider Electric',
+        description: 'Push button dimmer',
         fromZigbee: [fz.on_off, fz.brightness, fz.level_config, fz.lighting_ballast_configuration],
         toZigbee: [tz.light_onoff_brightness, tz.level_config, tz.ballast_config],
         exposes: [e.light_brightness().withLevelConfig(),
@@ -124,6 +343,30 @@ module.exports = [
             await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'lightingBallastCfg']);
             await reporting.onOff(endpoint);
             await reporting.brightness(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['CH2AX/SWITCH/1'],
+        model: '41E2PBSWMZ/356PB2MBTZ',
+        vendor: 'Schneider Electric',
+        description: 'Wiser 40/300-Series module switch 2A',
+        extend: extend.switch(),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['CH10AX/SWITCH/1'],
+        model: '41E10PBSWMZ-VW',
+        vendor: 'Schneider Electric',
+        description: 'Wiser 40/300-Series module switch 10A with ControlLink',
+        extend: extend.switch(),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint);
         },
     },
     {
@@ -209,10 +452,11 @@ module.exports = [
         zigbeeModel: ['1GANG/SHUTTER/1'],
         model: 'MEG5113-0300/MEG5165-0000',
         vendor: 'Schneider Electric',
-        description: 'Merten PlusLink Shutter insert with Merten Wiser System M Push Button',
+        description: 'Merten MEG5165 PlusLink Shutter insert with Merten Wiser System M Push Button (1fold)',
         fromZigbee: [fz.cover_position_tilt, fz.command_cover_close, fz.command_cover_open, fz.command_cover_stop],
-        toZigbee: [tz.cover_position_tilt, tz.cover_state],
-        exposes: [e.cover_position()],
+        toZigbee: [tz.cover_position_tilt, tz.cover_state, tzLocal.lift_duration],
+        exposes: [e.cover_position(), exposes.numeric('lift_duration', ea.STATE_SET).withUnit('seconds')
+            .withValueMin(0).withValueMax(300).withDescription('Duration of lift')],
         meta: {coverInverted: true},
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1) || device.getEndpoint(5);
@@ -234,7 +478,7 @@ module.exports = [
         exposes: [e.switch().withEndpoint('l1'), e.switch().withEndpoint('l2'), e.action(['on_s*', 'off_s*'])],
         configure: async (device, coordinatorEndpoint, logger) => {
             device.endpoints.forEach(async (ep) => {
-                if (ep.outputClusters.includes(6)) {
+                if (ep.outputClusters.includes(6) || ep.ID <= 2) {
                     await reporting.bind(ep, coordinatorEndpoint, ['genOnOff']);
                     if (ep.ID <= 2) {
                         await reporting.onOff(ep);
@@ -254,6 +498,7 @@ module.exports = [
         endpoint: (device) => {
             return {'l1': 3, 's1': 21, 's2': 22, 's3': 23, 's4': 24};
         },
+        meta: {multiEndpoint: true},
         exposes: [e.light_brightness().withLevelConfig().withEndpoint('l1'),
             exposes.numeric('ballast_minimum_level', ea.ALL).withValueMin(1).withValueMax(254)
                 .withDescription('Specifies the minimum light output of the ballast')
@@ -306,6 +551,7 @@ module.exports = [
         endpoint: (device) => {
             return {'top': 21, 'bottom': 22};
         },
+        whiteLabel: [{vendor: 'Elko', model: 'EKO07117'}],
         meta: {multiEndpoint: true},
         exposes: [e.action(['on_top', 'off_top', 'on_bottom', 'off_bottom', 'brightness_move_up_top', 'brightness_stop_top',
             'brightness_move_down_top', 'brightness_stop_top', 'brightness_move_up_bottom', 'brightness_stop_bottom',
@@ -335,8 +581,8 @@ module.exports = [
             const endpoint1 = device.getEndpoint(1);
             const endpoint2 = device.getEndpoint(2);
             await reporting.bind(endpoint1, coordinatorEndpoint, ['hvacThermostat']);
-            await reporting.thermostatOccupiedHeatingSetpoint(endpoint1, {min: 0, max: 60, change: 1});
-            await reporting.thermostatPIHeatingDemand(endpoint1, {min: 0, max: 60, change: 1});
+            await reporting.thermostatOccupiedHeatingSetpoint(endpoint1);
+            await reporting.thermostatPIHeatingDemand(endpoint1);
             await reporting.bind(endpoint2, coordinatorEndpoint, ['seMetering']);
             await reporting.instantaneousDemand(endpoint2, {min: 0, max: 60, change: 1});
             await reporting.currentSummDelivered(endpoint2, {min: 0, max: 60, change: 1});
@@ -424,7 +670,7 @@ module.exports = [
             exposes.climate()
                 .withSetpoint('occupied_heating_setpoint', 7, 30, 0.5, ea.STATE_SET)
                 .withLocalTemperature(ea.STATE)
-                .withLocalTemperatureCalibration(ea.STATE_SET)
+                .withLocalTemperatureCalibration(-30, 30, 0.1, ea.STATE_SET)
                 .withPiHeatingDemand()],
         meta: {battery: {voltageToPercentage: '3V_2500'}},
         configure: async (device, coordinatorEndpoint, logger) => {
@@ -439,9 +685,8 @@ module.exports = [
             const binds = ['genBasic', 'genPowerCfg', 'hvacThermostat'];
             await reporting.bind(endpoint, coordinatorEndpointB, binds);
             await reporting.batteryVoltage(endpoint);
-            await reporting.thermostatTemperature(endpoint, {min: constants.repInterval.MINUTE,
-                max: constants.repInterval.MINUTES_15, change: 50});
-            await reporting.thermostatOccupiedHeatingSetpoint(endpoint, {min: 0, max: constants.repInterval.MINUTES_15, change: 25});
+            await reporting.thermostatTemperature(endpoint);
+            await reporting.thermostatOccupiedHeatingSetpoint(endpoint);
             await endpoint.configureReporting('hvacUserInterfaceCfg', [{attribute: 'keypadLockout',
                 minimumReportInterval: constants.repInterval.MINUTE,
                 maximumReportInterval: constants.repInterval.HOUR,
@@ -495,7 +740,191 @@ module.exports = [
             const endpoint = device.getEndpoint(11);
             const binds = ['genBasic', 'genPowerCfg', 'hvacThermostat', 'msTemperatureMeasurement'];
             await reporting.bind(endpoint, coordinatorEndpoint, binds);
-            await reporting.thermostatOccupiedHeatingSetpoint(endpoint, {min: 0, max: constants.repInterval.MINUTES_15, change: 25});
+            await reporting.thermostatOccupiedHeatingSetpoint(endpoint);
         },
+    },
+    {
+        zigbeeModel: ['FLS/SYSTEM-M/4'],
+        model: 'WDE002906',
+        vendor: 'Schneider Electric',
+        description: 'Wiser wireless switch 1-gang',
+        fromZigbee: [fz.command_on, fz.command_off, fz.command_move, fz.command_stop, fz.battery],
+        toZigbee: [],
+        exposes: [e.action(['on', 'off', 'brightness_move_up', 'brightness_move_down', 'brightness_stop']),
+            e.battery()],
+        meta: {disableActionGroup: true},
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(21);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'genPowerCfg']);
+            await reporting.batteryPercentageRemaining(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['SOCKET/OUTLET/2'],
+        model: 'EKO09738',
+        vendor: 'Schneider Electric',
+        description: 'Zigbee smart socket with power meter',
+        fromZigbee: [fz.on_off, fz.electrical_measurement, fz.EKO09738_metering, fz.power_on_behavior],
+        toZigbee: [tz.on_off, tz.power_on_behavior],
+        exposes: [e.switch(), e.power(), e.energy(), exposes.enum('power_on_behavior', ea.ALL, ['off', 'previous', 'on'])
+            .withDescription('Controls the behaviour when the device is powered on'), e.current(), e.voltage()],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(6);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'haElectricalMeasurement', 'seMetering']);
+            await reporting.onOff(endpoint);
+            // Unit supports acVoltage and acCurrent, but only acCurrent divisor/multiplier can be read
+            await endpoint.read('haElectricalMeasurement', ['acCurrentDivisor', 'acCurrentMultiplier']);
+            await reporting.readMeteringMultiplierDivisor(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['SOCKET/OUTLET/1'],
+        model: 'EKO09716',
+        vendor: 'Schneider Electric',
+        description: 'Zigbee smart socket with power meter',
+        fromZigbee: [fz.on_off, fz.electrical_measurement, fz.EKO09738_metering, fz.power_on_behavior],
+        toZigbee: [tz.on_off, tz.power_on_behavior],
+        exposes: [e.switch(), e.power(), e.energy(), exposes.enum('power_on_behavior', ea.ALL, ['off', 'previous', 'on'])
+            .withDescription('Controls the behaviour when the device is powered on'), e.current(), e.voltage()],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(6);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'haElectricalMeasurement', 'seMetering']);
+            await reporting.onOff(endpoint);
+            // Unit supports acVoltage and acCurrent, but only acCurrent divisor/multiplier can be read
+            await endpoint.read('haElectricalMeasurement', ['acCurrentDivisor', 'acCurrentMultiplier']);
+            await reporting.readMeteringMultiplierDivisor(endpoint);
+        },
+    },
+    {
+        zigbeeModel: ['LK/OUTLET/1'],
+        model: '545D6115',
+        vendor: 'Schneider Electric',
+        description: 'LK FUGA wiser wireless socket outlet',
+        fromZigbee: [fz.on_off, fz.electrical_measurement, fz.EKO09738_metering, fz.power_on_behavior],
+        toZigbee: [tz.on_off, tz.power_on_behavior],
+        exposes: [e.switch(), e.power(), e.energy(), e.current(), e.voltage(),
+            exposes.enum('power_on_behavior', ea.ALL, ['off', 'previous', 'on'])
+                .withDescription('Controls the behaviour when the device is powered on')],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(6);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'haElectricalMeasurement', 'seMetering']);
+            await reporting.onOff(endpoint);
+            // Unit supports acVoltage and acCurrent, but only acCurrent divisor/multiplier can be read
+            await endpoint.read('haElectricalMeasurement', ['acCurrentDivisor', 'acCurrentMultiplier']);
+            await reporting.readMeteringMultiplierDivisor(endpoint);
+            await reporting.currentSummDelivered(endpoint, {min: 60, change: 1});
+        },
+    },
+    {
+        zigbeeModel: ['NHMOTION/SWITCH/1'],
+        model: '545D6306',
+        vendor: 'Schneider Electric',
+        description: 'LK FUGA Wiser wireless PIR with relay',
+        fromZigbee: [fz.on_off, fz.illuminance, fz.occupancy, fz.occupancy_timeout],
+        exposes: [e.switch().withEndpoint('l1'), e.occupancy(), e.illuminance_lux(), e.illuminance(),
+            exposes.numeric('occupancy_timeout', ea.ALL).withUnit('second').withValueMin(0).withValueMax(3600)
+                .withDescription('Time in seconds after which occupancy is cleared after detecting it')],
+        toZigbee: [tz.on_off, tz.occupancy_timeout],
+        endpoint: (device) => {
+            return {'default': 37, 'l1': 1, 'l2': 37};
+        },
+        meta: {multiEndpoint: true},
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint1 = device.getEndpoint(1);
+            const binds1 = ['genBasic', 'genIdentify', 'genOnOff'];
+            await reporting.bind(endpoint1, coordinatorEndpoint, binds1);
+            await reporting.onOff(endpoint1);
+            // read switch state
+            await endpoint1.read('genOnOff', ['onOff']);
+
+            const endpoint37 = device.getEndpoint(37);
+            const binds37 = ['msIlluminanceMeasurement', 'msOccupancySensing'];
+            await reporting.bind(endpoint37, coordinatorEndpoint, binds37);
+            await reporting.occupancy(endpoint37);
+            await reporting.illuminance(endpoint37);
+            // read occupancy_timeout
+            await endpoint37.read('msOccupancySensing', ['pirOToUDelay']);
+        },
+    },
+    {
+        zigbeeModel: ['CCT595011_AS'],
+        model: 'CCT595011',
+        vendor: 'Schneider Electric',
+        description: 'Wiser motion sensor',
+        fromZigbee: [fz.battery, fz.ias_enroll, fz.ias_occupancy_only_alarm_2, fz.illuminance],
+        toZigbee: [],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            const binds = ['genPowerCfg', 'msIlluminanceMeasurement'];
+            await reporting.bind(endpoint, coordinatorEndpoint, binds);
+            await reporting.batteryPercentageRemaining(endpoint);
+            await reporting.illuminance(endpoint, {min: 15, max: constants.repInterval.HOUR, change: 500});
+        },
+        exposes: [e.battery(), e.illuminance(), e.illuminance_lux(), e.occupancy()],
+    },
+    {
+        zigbeeModel: ['CH/Socket/2'],
+        model: '3025CSGZ',
+        vendor: 'Schneider Electric',
+        description: 'Dual connected smart socket',
+        extend: extend.switch(),
+        exposes: [e.switch().withEndpoint('l1'), e.switch().withEndpoint('l2')],
+        meta: {multiEndpoint: true},
+        endpoint: (device) => {
+            return {'l1': 1, 'l2': 2};
+        },
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint1 = device.getEndpoint(1);
+            await reporting.bind(endpoint1, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint1);
+            const endpoint2 = device.getEndpoint(2);
+            await reporting.bind(endpoint2, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint2);
+        },
+    },
+    {
+        zigbeeModel: ['CCT592011_AS'],
+        model: 'CCT592011',
+        vendor: 'Schneider Electric',
+        description: 'Wiser water leakage sensor',
+        fromZigbee: [fz.ias_water_leak_alarm_1],
+        toZigbee: [],
+        exposes: [e.battery_low(), e.water_leak(), e.tamper()],
+    },
+    {
+        fingerprint: [{modelID: 'GreenPower_254', ieeeAddr: /^0x00000000e.......$/}],
+        model: 'A9MEM1570',
+        vendor: 'Schneider Electric',
+        description: 'PowerTag power sensor',
+        fromZigbee: [fzLocal.schneider_powertag],
+        toZigbee: [],
+        exposes: [
+            e.power(),
+            e.power_apparent(),
+            exposes.numeric('power_phase_a', ea.STATE).withUnit('W').withDescription('Instantaneous measured power on phase A'),
+            exposes.numeric('power_phase_b', ea.STATE).withUnit('W').withDescription('Instantaneous measured power on phase B'),
+            exposes.numeric('power_phase_c', ea.STATE).withUnit('W').withDescription('Instantaneous measured power on phase C'),
+            e.power_factor(),
+            e.energy(),
+            exposes.numeric('energy_phase_a', ea.STATE).withUnit('kWh').withDescription('Sum of consumed energy on phase A'),
+            exposes.numeric('energy_phase_b', ea.STATE).withUnit('kWh').withDescription('Sum of consumed energy on phase B'),
+            exposes.numeric('energy_phase_c', ea.STATE).withUnit('kWh').withDescription('Sum of consumed energy on phase C'),
+            e.ac_frequency(),
+            exposes.numeric('voltage_phase_a', ea.STATE).withUnit('V').withDescription('Measured electrical potential value on phase A'),
+            exposes.numeric('voltage_phase_b', ea.STATE).withUnit('V').withDescription('Measured electrical potential value on phase B'),
+            exposes.numeric('voltage_phase_c', ea.STATE).withUnit('V').withDescription('Measured electrical potential value on phase C'),
+            exposes.numeric('voltage_phase_ab', ea.STATE)
+                .withUnit('V').withDescription('Measured electrical potential value between phase A and B'),
+            exposes.numeric('voltage_phase_bc', ea.STATE)
+                .withUnit('V').withDescription('Measured electrical potential value between phase B and C'),
+            exposes.numeric('voltage_phase_ca', ea.STATE)
+                .withUnit('V').withDescription('Measured electrical potential value between phase C and A'),
+            exposes.numeric('current_phase_a', ea.STATE)
+                .withUnit('A').withDescription('Instantaneous measured electrical current on phase A'),
+            exposes.numeric('current_phase_b', ea.STATE)
+                .withUnit('A').withDescription('Instantaneous measured electrical current on phase B'),
+            exposes.numeric('current_phase_c', ea.STATE)
+                .withUnit('A').withDescription('Instantaneous measured electrical current on phase C'),
+        ],
     },
 ];

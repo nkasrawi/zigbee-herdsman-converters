@@ -5,6 +5,16 @@ const e = exposes.presets;
 
 module.exports = [
     {
+        zigbeeModel: ['501.34'],
+        model: '501.34',
+        vendor: 'Paulmann',
+        description: 'Smart switch 4 buttons white',
+        fromZigbee: [fz.command_on, fz.command_off, fz.battery],
+        toZigbee: [],
+        exposes: [e.battery(), e.action(['on_1', 'off_1', 'on_2', 'off_2'])],
+        meta: {multiEndpoint: true},
+    },
+    {
         zigbeeModel: ['H036-0007'],
         model: '929.66',
         vendor: 'Paulmann',
@@ -12,14 +22,21 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
-        zigbeeModel: ['Switch Controller '],
+        zigbeeModel: ['Switch Controller'],
         model: '50043',
         vendor: 'Paulmann',
         description: 'SmartHome Zigbee Cephei Switch Controller',
         extend: extend.switch(),
     },
     {
-        zigbeeModel: ['Dimmablelight '],
+        zigbeeModel: ['50131'],
+        model: '501.31',
+        vendor: 'Paulmann',
+        description: 'Smart plug for Euro- and Schuko-sockets',
+        extend: extend.switch(),
+    },
+    {
+        zigbeeModel: ['Dimmablelight'],
         model: '50044/50045',
         vendor: 'Paulmann',
         description: 'SmartHome Zigbee Dimmer or LED-stripe',
@@ -33,14 +50,29 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
-        zigbeeModel: ['RGBW light', '500.49'],
+        zigbeeModel: ['RGBW light', '500.49', 'RGBW_light'],
         model: '50049/500.63',
         vendor: 'Paulmann',
         description: 'Smart Home Zigbee YourLED RGB Controller max. 60W / Smart Home Zigbee LED Reflektor 3,5W GU10 RGBW dimmbar',
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
-        zigbeeModel: ['CCT light'],
+        zigbeeModel: ['RGBCW_LIGHT'],
+        model: '4137',
+        vendor: 'Paulmann',
+        description: 'Smart Home Zigbee LED bulb 9,3W Matt E27 RGBW',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 370]}),
+    },
+    {
+        fingerprint: [{modelID: 'RGBW Controller', manufacturerName: 'Paulmann Licht'}],
+        model: '94191',
+        vendor: 'Paulmann',
+        description: 'Plug & shine LED strip',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 370]}),
+    },
+    {
+        fingerprint: [{modelID: 'CCT Light', manufacturerName: 'Paulmann lamp'}],
+        zigbeeModel: ['CCT light', 'CCT_light', 'CCT light '],
         model: '50064',
         vendor: 'Paulmann',
         description: 'SmartHome led spot',
@@ -75,8 +107,15 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
+        zigbeeModel: ['371232040'],
+        model: '371232040',
+        vendor: 'Paulmann',
+        description: 'LED panels',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 350]}),
+    },
+    {
         zigbeeModel: ['500.45'],
-        model: '798.15',
+        model: '500.45',
         vendor: 'Paulmann',
         description: 'SmartHome Zigbee Pendulum Light Aptare',
         extend: extend.light_onoff_brightness(),
@@ -96,7 +135,7 @@ module.exports = [
         extend: extend.light_onoff_brightness(),
     },
     {
-        zigbeeModel: ['RemoteControl '],
+        zigbeeModel: ['RemoteControl'],
         model: '500.67',
         vendor: 'Paulmann',
         description: 'RGB remote control',
