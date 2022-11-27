@@ -64,7 +64,7 @@ module.exports = [
         toZigbee: extend.light_onoff_brightness().toZigbee.concat([tz.tint_scene]),
     },
     {
-        zigbeeModel: ['ZBT-ExtendedColor'],
+        zigbeeModel: ['ZBT-ExtendedColor', 'Bulb white+color'],
         model: '404000/404005/404012/404019',
         vendor: 'Müller Licht',
         description: 'Tint LED bulb GU10/E14/E27 350/470/806 lumen, dimmable, color, opal white',
@@ -191,5 +191,29 @@ module.exports = [
         vendor: 'Müller Licht',
         description: 'Tint Armaro',
         extend: extend.light_onoff_brightness_colortemp(),
+    },
+    {
+        fingerprint: [{manufacturerName: 'MLI', modelID: 'Bulb white'}],
+        model: '45727',
+        vendor: 'Müller Licht',
+        description: 'Tint Amela 42cm, white+ambiance (1800-6500K)',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 555]}),
+        toZigbee: extend.light_onoff_brightness_colortemp().toZigbee.concat([tz.tint_scene]),
+    },
+    {
+        fingerprint: [{manufacturerName: 'MLI', modelID: 'Candle white+color'}],
+        model: '45730',
+        vendor: 'Müller Licht',
+        description: 'Tint candle E14 white+color',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 555]}),
+        toZigbee: extend.light_onoff_brightness_colortemp_color().toZigbee.concat([tz.tint_scene]),
+    },
+    {
+        fingerprint: [{manufacturerName: 'MLI', modelID: 'Bulb white+color'}],
+        model: '45728',
+        vendor: 'Müller Licht',
+        description: 'Tint bulb E27 white+color',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 555]}),
+        toZigbee: extend.light_onoff_brightness_colortemp_color().toZigbee.concat([tz.tint_scene]),
     },
 ];
