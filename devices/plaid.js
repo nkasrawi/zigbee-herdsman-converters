@@ -1,6 +1,6 @@
-const fz = require('zigbee-herdsman-converters/converters/fromZigbee');
-const exposes = require('zigbee-herdsman-converters/lib/exposes');
-const reporting = require('zigbee-herdsman-converters/lib/reporting');
+const fz = require('../converters/fromZigbee');
+const exposes = require('../lib/exposes');
+const reporting = require('../lib/reporting');
 const e = exposes.presets;
 
 module.exports = [
@@ -16,9 +16,10 @@ module.exports = [
         meta: {battery: {voltageToPercentage: '3V_2500'}},
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
-            await reporting.bind(endpoint, coordinatorEndpoint, ['genPowerCfg', 'msTemperatureMeasurement', 'msRelativeHumidity']);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['msTemperatureMeasurement', 'msRelativeHumidity', 'genPowerCfg']);
             await reporting.temperature(endpoint);
             await reporting.humidity(endpoint);
+            device.powerSource = 'Battery';
         },
     },
 ];

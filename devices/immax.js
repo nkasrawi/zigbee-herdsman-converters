@@ -9,11 +9,21 @@ const ea = exposes.access;
 
 module.exports = [
     {
+
+        zigbeeModel: ['Motion-Sensor-ZB3.0'],
+        model: '07043M',
+        vendor: 'Immax',
+        description: 'Motion sensor',
+        fromZigbee: [fz.ias_occupancy_alarm_1, fz.battery],
+        toZigbee: [],
+        exposes: [e.occupancy(), e.battery_low(), e.tamper(), e.battery()],
+    },
+    {
         zigbeeModel: ['ZBT-CCTfilament-D0000'],
         model: '07089L',
         vendor: 'Immax',
         description: 'NEO SMART LED E27 5W',
-        extend: extend.light_onoff_brightness_colortemp(),
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 370]}),
     },
     {
         zigbeeModel: ['E27-filament-Dim-ZB3.0'],
@@ -44,6 +54,13 @@ module.exports = [
         extend: extend.light_onoff_brightness_colortemp_color(),
     },
     {
+        fingerprint: [{modelID: 'TS0505B', manufacturerName: '_TZ3210_pwauw3g2'}],
+        model: '07743L',
+        vendor: 'Immax',
+        description: 'Neo Smart LED E27 11W RGB + CCT, color, dimmable, Zigbee 3.0',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [153, 500]}),
+    },
+    {
         zigbeeModel: ['Keyfob-ZB3.0'],
         model: '07046L',
         vendor: 'Immax',
@@ -66,16 +83,18 @@ module.exports = [
         model: '07048L',
         vendor: 'Immax',
         description: 'NEO SMART plug',
-        fromZigbee: [fz.on_off, fz.electrical_measurement],
+        fromZigbee: [fz.on_off, fz.electrical_measurement, fz.metering],
         toZigbee: [tz.on_off],
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
-            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'haElectricalMeasurement']);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'haElectricalMeasurement', 'seMetering']);
             await reporting.onOff(endpoint);
             await reporting.readEletricalMeasurementMultiplierDivisors(endpoint);
-            await reporting.activePower(endpoint);
+            await reporting.readMeteringMultiplierDivisor(endpoint);
+            await reporting.currentSummDelivered(endpoint);
+            await reporting.activePower(endpoint, {change: 5});
         },
-        exposes: [e.switch(), e.power()],
+        exposes: [e.switch(), e.power(), e.energy()],
     },
     {
         zigbeeModel: ['losfena'],
@@ -95,10 +114,10 @@ module.exports = [
                 weeklyScheduleFirstDayDpId: tuya.dataPoints.schedule,
             },
         },
-        exposes: [e.battery_low(), e.child_lock(), exposes.climate()
+        exposes: [e.battery_low(), e.child_lock(), e.away_mode(), exposes.climate()
             .withSetpoint('current_heating_setpoint', 5, 35, 0.5, ea.STATE_SET)
             .withLocalTemperature(ea.STATE).withSystemMode(['off', 'heat', 'auto'], ea.STATE_SET)
-            .withRunningState(['idle', 'heat'], ea.STATE).withAwayMode()],
+            .withRunningState(['idle', 'heat'], ea.STATE)],
     },
     {
         zigbeeModel: ['Bulb-RGB+CCT-ZB3.0'],
@@ -139,5 +158,28 @@ module.exports = [
         vendor: 'Immax',
         description: 'Neo RECUADRO SMART, color temp, dimmable, Zigbee 3.0',
         extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 370]}),
+    },
+    {
+        fingerprint: [{modelID: 'TS0202', manufacturerName: '_TZ3210_jijr1sss'}],
+        model: '07502L',
+        vendor: 'Immax',
+        description: '4 in 1 multi sensor',
+        fromZigbee: [fz.battery, fz.ignore_basic_report, fz.illuminance, fz.ZB003X, fz.ZB003X_attr, fz.ZB003X_occupancy],
+        toZigbee: [tz.ZB003X],
+        exposes: [e.occupancy(), e.tamper(), e.battery(), e.illuminance(), e.illuminance_lux().withUnit('lx'), e.temperature(),
+            e.humidity(), exposes.numeric('reporting_time', ea.STATE_SET).withDescription('Reporting interval in minutes')
+                .withValueMin(0).withValueMax(1440),
+            exposes.numeric('temperature_calibration', ea.STATE_SET).withDescription('Temperature calibration')
+                .withValueMin(-20).withValueMax(20),
+            exposes.numeric('humidity_calibration', ea.STATE_SET).withDescription('Humidity calibration')
+                .withValueMin(-50).withValueMax(50),
+            exposes.numeric('illuminance_calibration', ea.STATE_SET).withDescription('Illuminance calibration')
+                .withValueMin(-10000).withValueMax(10000),
+            exposes.binary('pir_enable', ea.STATE_SET, true, false).withDescription('Enable PIR sensor'),
+            exposes.binary('led_enable', ea.STATE_SET, true, false).withDescription('Enabled LED'),
+            exposes.binary('reporting_enable', ea.STATE_SET, true, false).withDescription('Enabled reporting'),
+            exposes.enum('sensitivity', ea.STATE_SET, ['low', 'medium', 'high']).withDescription('PIR sensor sensitivity'),
+            // eslint-disable-next-line
+            exposes.enum('keep_time', ea.STATE_SET, ['0', '30', '60', '120', '240']).withDescription('PIR keep time in seconds')],
     },
 ];

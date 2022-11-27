@@ -91,7 +91,7 @@ module.exports = [
         },
         exposes: [e.battery_low(), e.tamper(), e.warning(),
             exposes.numeric('max_duration', ea.ALL).withUnit('s').withValueMin(0).withValueMax(600).withDescription('Duration of Siren'),
-            exposes.binary('alarm', ea.SET, 'ON', 'OFF').withDescription('Manual start of siren')],
+            exposes.binary('alarm', ea.SET, 'START', 'OFF').withDescription('Manual start of siren')],
     },
     {
         zigbeeModel: ['WS15_00.00.00.14TC'],
@@ -110,5 +110,29 @@ module.exports = [
         fromZigbee: [fz.ias_carbon_monoxide_alarm_1, fz.battery],
         toZigbee: [],
         exposes: [e.carbon_monoxide(), e.battery_low(), e.tamper(), e.battery()],
+    },
+    {
+        zigbeeModel: ['KP-ACE_00.00.03.12TC'],
+        model: 'KP-23EL-ZBS-ACE',
+        vendor: 'Climax',
+        description: 'Remote Keypad',
+        fromZigbee: [fz.ias_keypad, fz.battery, fz.command_arm, fz.command_panic, fz.command_emergency],
+        toZigbee: [],
+        exposes: [e.battery_low(), e.tamper(), e.action(['emergency', 'panic', 'disarm', 'arm_all_zones', 'arm_day_zones']),
+        ],
+    },
+    {
+        zigbeeModel: ['PRL_00.00.03.04TC'],
+        model: 'PRL-1ZBS-12/24V',
+        vendor: 'Climax',
+        description: 'Zigbee 12-24V relay controller',
+        extend: extend.switch(),
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
+            await reporting.onOff(endpoint);
+            device.powerSource = 'Mains (single phase)';
+            device.save();
+        },
     },
 ];

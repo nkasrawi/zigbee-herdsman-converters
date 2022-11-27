@@ -3,6 +3,23 @@ const fz = {...require('../converters/fromZigbee'), legacy: require('../lib/lega
 const tz = require('../converters/toZigbee');
 const reporting = require('../lib/reporting');
 const extend = require('../lib/extend');
+const utils = require('../lib/utils');
+const e = exposes.presets;
+const ea = exposes.access;
+
+const fzLocal = {
+    on_off_via_brightness: {
+        cluster: 'genLevelCtrl',
+        type: ['attributeReport', 'readResponse'],
+        convert: (model, msg, publish, options, meta) => {
+            if (msg.data.hasOwnProperty('currentLevel')) {
+                const currentLevel = Number(msg.data['currentLevel']);
+                const property = utils.postfixWithEndpointName('state', msg, model, meta);
+                return {[property]: currentLevel > 0 ? 'ON' : 'OFF'};
+            }
+        },
+    },
+};
 
 module.exports = [
     {
@@ -80,6 +97,33 @@ module.exports = [
         exposes: [
             exposes.climate().withSetpoint('occupied_heating_setpoint', 10, 30, 1).withLocalTemperature()
                 .withSystemMode(['off', 'auto', 'heat', 'cool']).withFanMode(['auto', 'on', 'smart'])
-                .withSetpoint('occupied_cooling_setpoint', 10, 30, 1).withLocalTemperatureCalibration().withPiHeatingDemand()],
+                .withSetpoint('occupied_cooling_setpoint', 10, 30, 1)
+                .withLocalTemperatureCalibration(-30, 30, 0.1).withPiHeatingDemand()],
+    },
+    {
+        // Reference from a similar switch: https://gist.github.com/nebhead/dc5a0a827ec14eef6196ded4be6e2dd0
+        zigbeeModel: ['ZS057'],
+        model: 'ZS057-D0Z',
+        vendor: 'Leviton',
+        description: 'Wall switch, 0-10V dimmer, 120-277V, Lumina™ RF',
+        meta: {disableDefaultResponse: true},
+        extend: extend.light_onoff_brightness({disableEffect: true, noConfigure: true}),
+        fromZigbee: [fz.on_off, fzLocal.on_off_via_brightness, fz.lighting_ballast_configuration],
+        toZigbee: [tz.light_onoff_brightness, tz.ballast_config],
+        exposes: [e.light_brightness(),
+            // Note: ballast_power_on_level used to be here, but it does't appear to work properly with this device
+            // If set, it's reset back to 0 when the device is turned off then back to 32 when turned on
+            exposes.numeric('ballast_minimum_level', ea.ALL).withValueMin(1).withValueMax(254)
+                .withDescription('Specifies the minimum brightness value'),
+            exposes.numeric('ballast_maximum_level', ea.ALL).withValueMin(1).withValueMax(254)
+                .withDescription('Specifies the maximum brightness value')],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'lightingBallastCfg']);
+            // This device doesn't reliably report state changes - make it chatty to compensate for that
+            // This feels like a hack - hopefully there is a better fix at some point
+            await reporting.onOff(endpoint, {max: 5});
+            await reporting.brightness(endpoint, {max: 5});
+        },
     },
 ];
