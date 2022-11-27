@@ -3,6 +3,7 @@ const fz = {...require('../converters/fromZigbee'), legacy: require('../lib/lega
 const tz = require('../converters/toZigbee');
 const reporting = require('../lib/reporting');
 const extend = require('../lib/extend');
+const ota = require('../lib/ota');
 const e = exposes.presets;
 
 module.exports = [
@@ -60,6 +61,7 @@ module.exports = [
         fromZigbee: [fz.ias_water_leak_alarm_1, fz.battery],
         meta: {battery: {dontDividePercentage: true}},
         toZigbee: [],
+        ota: ota.zigbeeOTA,
         exposes: [e.water_leak(), e.battery_low(), e.battery(), e.battery_voltage()],
         configure: async (device, coordinatorEndpoint, logger) => {
             device.powerSource = 'Battery';
@@ -73,8 +75,12 @@ module.exports = [
         description: 'Wireless motion sensor',
         fromZigbee: [fz.ias_occupancy_alarm_1, fz.battery],
         toZigbee: [],
-        meta: {battery: {dontDividePercentage: true}},
+        ota: ota.zigbeeOTA,
         exposes: [e.occupancy(), e.battery_low(), e.battery(), e.battery_voltage()],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            device.powerSource = 'Battery';
+            device.save();
+        },
     },
     {
         zigbeeModel: ['3RDS17BZ'],
@@ -83,8 +89,13 @@ module.exports = [
         description: 'Door sensor',
         fromZigbee: [fz.ias_contact_alarm_1, fz.battery],
         toZigbee: [],
+        ota: ota.zigbeeOTA,
         meta: {battery: {dontDividePercentage: true}},
         exposes: [e.contact(), e.battery_low(), e.battery(), e.battery_voltage()],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            device.powerSource = 'Battery';
+            device.save();
+        },
     },
     {
         zigbeeModel: ['3RSP019BZ'],
@@ -97,5 +108,48 @@ module.exports = [
             await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
             await reporting.onOff(endpoint);
         },
+    },
+    {
+        zigbeeModel: ['3RSB015BZ'],
+        model: '3RSB015BZ',
+        vendor: 'Third Reality',
+        description: 'Roller shade',
+        fromZigbee: [fz.cover_position_tilt, fz.battery],
+        toZigbee: [tz.cover_state, tz.cover_position_tilt],
+        meta: {battery: {dontDividePercentage: false}},
+        ota: ota.zigbeeOTA,
+        configure: async (device, coordinatorEndpoint, logger) => {
+            const endpoint = device.getEndpoint(1);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genPowerCfg', 'closuresWindowCovering']);
+            await reporting.currentPositionLiftPercentage(endpoint);
+            try {
+                await reporting.batteryPercentageRemaining(endpoint);
+            } catch (error) {/* Fails for some*/}
+        },
+        exposes: [e.cover_position(), e.battery()],
+    },
+    {
+        zigbeeModel: ['3RSB22BZ'],
+        model: '3RSB22BZ',
+        vendor: 'Third Reality',
+        description: 'Smart button',
+        fromZigbee: [fz.battery, fz.itcmdr_clicks],
+        toZigbee: [],
+        ota: ota.zigbeeOTA,
+        exposes: [e.battery(), e.battery_low(), e.battery_voltage(), e.action(['single', 'double', 'long'])],
+        configure: async (device, coordinatorEndpoint, logger) => {
+            device.powerSource = 'Battery';
+            device.save();
+        },
+    },
+    {
+        zigbeeModel: ['3RTHS24BZ'],
+        model: '3RTHS24BZ',
+        vendor: 'Third Reality',
+        description: 'Temperature and humidity sensor',
+        fromZigbee: [fz.battery, fz.temperature, fz.humidity],
+        toZigbee: [],
+        exposes: [e.battery(), e.temperature(), e.humidity(), e.battery_voltage()],
+        ota: ota.zigbeeOTA,
     },
 ];

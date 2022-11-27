@@ -1,6 +1,6 @@
 const index = require('../index');
 const exposes = require('../lib/exposes');
-const utils = require('../lib/utils');
+const tuya = require('../lib/tuya');
 const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
 const equals = require('fast-deep-equal/es6');
 const fs = require('fs');
@@ -267,7 +267,7 @@ describe('index.js', () => {
             }
 
             if (device.meta) {
-                containsOnly(['disableActionGroup', 'multiEndpoint', 'applyRedFix', 'disableDefaultResponse', 'enhancedHue', 'timeout', 'supportsHueAndSaturation', 'battery', 'coverInverted', 'turnsOffAtBrightness1', 'pinCodeCount', 'tuyaThermostatSystemMode', 'tuyaThermostatPreset', 'tuyaThermostatPresetToSystemMode', 'thermostat', 'fanStateOn', 'separateWhite'], Object.keys(device.meta));
+                containsOnly(['disableActionGroup', 'multiEndpoint', 'applyRedFix', 'disableDefaultResponse', 'enhancedHue', 'timeout', 'supportsHueAndSaturation', 'battery', 'coverInverted', 'turnsOffAtBrightness1', 'coverStateFromTilt', 'pinCodeCount', 'tuyaThermostatSystemMode', 'tuyaThermostatPreset', 'tuyaDatapoints', 'tuyaThermostatPresetToSystemMode', 'thermostat', 'fanStateOn', 'separateWhite', 'publishDuplicateTransaction'], Object.keys(device.meta));
             }
 
             if (device.zigbeeModel) {
@@ -375,6 +375,9 @@ describe('index.js', () => {
     it('Exposes access matches toZigbee', () => {
         index.definitions.forEach((device) => {
             if (device.exposes) {
+                // tuya.tzDataPoints is generic, keys cannot be used to determine expose access
+                if (device.toZigbee.includes(tuya.tzDataPoints)) return;
+
                 const toCheck = [];
                 const expss = typeof device.exposes == 'function' ? device.exposes() : device.exposes;
                 for (const expose of expss) {
@@ -480,10 +483,10 @@ describe('index.js', () => {
     });
 
     it('Verify options filter', () => {
-        const ZNJLBL01LM = index.definitions.find((d) => d.model == 'ZNJLBL01LM');
-        expect(ZNJLBL01LM.options.length).toBe(1);
+        const ZNCLDJ12LM = index.definitions.find((d) => d.model == 'ZNCLDJ12LM');
+        expect(ZNCLDJ12LM.options.length).toBe(1);
         const ZNCZ04LM = index.definitions.find((d) => d.model == 'ZNCZ04LM');
-        expect(ZNCZ04LM.options.length).toBe(2);
+        expect(ZNCZ04LM.options.length).toBe(1);
     });
 
     it('Verify imports', () => {
@@ -494,12 +497,60 @@ describe('index.js', () => {
         }
     });
 
-    it('Test to percentage', () => {
-        expect(utils.toPercentage(3000, 2850, 3200, true)).toBe(79);
-        expect(utils.toPercentage(3200, 2850, 3200, true)).toBe(100);
-        expect(utils.toPercentage(4000, 2850, 3200, true)).toBe(100);
-        expect(utils.toPercentage(2000, 2850, 3200, true)).toBe(0);
-        expect(utils.toPercentage(2850, 2850, 3200, true)).toBe(0);
-        expect(utils.toPercentage(2851, 2850, 3200, true)).toBe(2);
+    it('List expose number', () => {
+        // Example payload:
+        // {"temperatures": [19,21,30]}
+        const itemType = exposes.numeric('temperature', exposes.access.STATE_SET);
+        const list = exposes.list('temperatures', exposes.access.STATE_SET, itemType);
+        expect(JSON.parse(JSON.stringify(list))).toStrictEqual({
+            "access": 3, 
+            "item_type": {"access": 3, "name": "temperature", "type": "numeric"}, 
+            "name": "temperatures", 
+            "property": "temperatures", 
+            "type": "list"
+        });
+    });
+
+    it('List expose composite', () => {
+        // Example payload:
+        // {"schedule": [{"day":"monday","hour":13,"minute":37}, {"day":"tuesday","hour":14,"minute":59}]}
+
+        const itemType = exposes.composite('dayTime', exposes.access.STATE_SET)
+            .withFeature(exposes.enum('day', exposes.access.STATE_SET, ['monday', 'tuesday', 'wednesday']))
+            .withFeature(exposes.numeric('hour', exposes.access.STATE_SET))
+            .withFeature(exposes.numeric('minute', exposes.access.STATE_SET))
+
+        const list = exposes.list('schedule', exposes.access.STATE_SET, itemType);
+        expect(JSON.parse(JSON.stringify(list))).toStrictEqual({
+            type: 'list',
+            name: 'schedule',
+            property: 'schedule',
+            access: 3,
+            item_type: {
+                type: 'composite',
+                name: 'dayTime',
+                features: [
+                    {
+                        access: 3, 
+                        name: "day", 
+                        property: "day", 
+                        type: "enum",
+                        values: ['monday', 'tuesday', 'wednesday'],
+                    },
+                    {
+                        access: 3, 
+                        name: "hour", 
+                        property: "hour", 
+                        type: "numeric",
+                    },
+                    {
+                        access: 3, 
+                        name: "minute", 
+                        property: "minute", 
+                        type: "numeric",
+                    },
+                ]
+            }
+        });
     });
 });

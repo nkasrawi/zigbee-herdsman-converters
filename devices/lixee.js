@@ -48,7 +48,7 @@ const fzLocal = {
 
             for (const at of elements) {
                 const at_snake = at.split(/(?=[A-Z])/).join('_').toLowerCase();
-                if (msg.data[at]) {
+                if (msg.data[at] != null) {
                     result[at_snake] = msg.data[at];
                 }
             }
@@ -104,7 +104,7 @@ const fzLocal = {
             for (const at of elements) {
                 const at_snake = at.split(/(?=[A-Z])/).join('_').toLowerCase();
                 let val = msg.data[at];
-                if (val) {
+                if (val != null) {
                     if (val.hasOwnProperty('type') && val.type === 'Buffer') {
                         val = Buffer.from(val.data);
                     }
@@ -155,7 +155,7 @@ const fzLocal = {
             for (const at of elements) {
                 const at_snake = at.split(/(?=[A-Z])/).join('_').toLowerCase();
                 const val = msg.data[at];
-                if (val) {
+                if (val != null) {
                     result[at_snake] = val; // By default we assign raw value
                     switch (at) {
                     // If we receive a Buffer, transform to human readable text
@@ -196,7 +196,8 @@ const fzLocal = {
 // we are doing it with exclusion and not inclusion because the list is dynamic (based on zlinky mode),
 // and change based on that. Just some few attributes are useless, so we exclude them
 const tarifsDef = {
-    histo_BASE: {fname: 'Historique - BASE',
+    histo_BASE: {
+        fname: 'Historique - BASE',
         currentTarf: 'BASE', excluded: [
             'HCHC',
             'HCHP',
@@ -212,7 +213,8 @@ const tarifsDef = {
             'DEMAIN',
             'PEJP',
         ]},
-    histo_HCHP: {fname: 'Historique - HCHP',
+    histo_HCHP: {
+        fname: 'Historique - HCHP',
         currentTarf: 'HC..', excluded: [
             'BASE',
             'EJPHN',
@@ -226,7 +228,8 @@ const tarifsDef = {
             'DEMAIN',
             'PEJP',
         ]},
-    histo_EJP: {fname: 'Historique - EJP',
+    histo_EJP: {
+        fname: 'Historique - EJP',
         currentTarf: 'EJP.', excluded: [
             'BASE',
             'HCHC',
@@ -239,7 +242,8 @@ const tarifsDef = {
             'BBRHPJR',
             'DEMAIN',
         ]},
-    histo_BBR: {fname: 'Historique - BBR',
+    histo_BBR: {
+        fname: 'Historique - BBR',
         currentTarf: 'BBR', excluded: [
             'BASE',
             'HCHC',
@@ -248,7 +252,8 @@ const tarifsDef = {
             'EJPHPM',
             'PEJP',
         ]},
-    stand_SEM_WE_MERCR: {fname: 'Standard - Sem WE Mercredi',
+    stand_SEM_WE_MERCR: {
+        fname: 'Standard - Sem WE Mercredi',
         currentTarf: 'SEM WE MERCREDI', excluded: [
             'EASF04',
             'EASF05',
@@ -271,8 +276,10 @@ const tarifsDef = {
             'PJOURF+1',
             'PPOINTE1',
         ]},
-    stand_HPHC: {fname: 'Standard - Heure Pleine Heure Creuse',
-        currentTarf: 'H PLEINE/CREUSE', excluded: [
+    stand_BASE: {
+        fname: 'Standard - BASE',
+        currentTarf: 'BASE',
+        excluded: [
             'EASF03',
             'EASF04',
             'EASF05',
@@ -295,7 +302,32 @@ const tarifsDef = {
             'PJOURF+1',
             'PPOINTE1',
         ]},
+    stand_HPHC: {
+        fname: 'Standard - Heure Pleine Heure Creuse',
+        currentTarf: 'H PLEINE/CREUSE', excluded: [
+            'EASF03',
+            'EASF04',
+            'EASF05',
+            'EASF06',
+            'EASF07',
+            'EASF08',
+            'EASF09',
+            'EASF10',
+            'EASD03',
+            'EASD04',
+            'DPM1',
+            'DPM2',
+            'DPM3',
+            'FPM1',
+            'FPM2',
+            'FPM3',
+            'NJOURF',
+            'NJOURF+1',
+            'PJOURF+1',
+            'PPOINTE1',
+        ]},
 };
+
 
 const linkyModeDef = {
     standard: 'standard',
@@ -504,6 +536,9 @@ function getCurrentConfig(device, options, logger=console) {
         break;
     case linkyMode == linkyModeDef.standard && tarifsDef.stand_HPHC.currentTarf:
         myExpose = myExpose.filter((a) => !tarifsDef.stand_HPHC.excluded.includes(a.exposes.name));
+        break;
+    case linkyMode == linkyModeDef.standard && tarifsDef.stand_BASE.currentTarf:
+        myExpose = myExpose.filter((a) => !tarifsDef.stand_BASE.excluded.includes(a.exposes.name));
         break;
     default:
         break;
