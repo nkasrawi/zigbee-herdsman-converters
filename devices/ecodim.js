@@ -8,9 +8,9 @@ module.exports = [
     {
         fingerprint: [
             {type: 'Router', manufacturerName: 'EcoDim BV', modelID: 'EcoDim-Zigbee 3.0', endpoints: [
-                {ID: 1, profileID: 260, deviceID: 257, inputClusters: [0, 3, 4, 5, 6, 8, 2821, 4096], outputClusters: [25]},
-                {ID: 2, profileID: 260, deviceID: 257, inputClusters: [0, 3, 4, 5, 6, 8], outputClusters: []},
-                {ID: 242, profileID: 41440, deviceID: 97, inputClusters: [], outputClusters: [33]},
+                {ID: 1, profileID: 260, inputClusters: [0, 3, 4, 5, 6, 8, 2821, 4096], outputClusters: [25]},
+                {ID: 2, profileID: 260, inputClusters: [0, 3, 4, 5, 6, 8], outputClusters: []},
+                {ID: 242, profileID: 41440, inputClusters: [], outputClusters: [33]},
             ]},
         ],
         model: 'Eco-Dim.05',
@@ -36,6 +36,11 @@ module.exports = [
         fingerprint: [
             {type: 'Router', manufacturerName: 'EcoDim BV', modelID: 'EcoDim-Zigbee 3.0', endpoints: [
                 {ID: 1, profileID: 260, deviceID: 257, inputClusters: [0, 3, 4, 5, 6, 8, 2821, 4096], outputClusters: [25]},
+                {ID: 242, profileID: 41440, deviceID: 97, inputClusters: [], outputClusters: [33]},
+            ]},
+            {type: 'Router', manufacturerName: 'EcoDim BV', modelID: 'EcoDim-Zigbee 3.0', endpoints: [
+                {ID: 1, profileID: 260, deviceID: 257, inputClusters: [0, 3, 4, 5, 6, 8, 2821, 4096], outputClusters: [25]},
+                {ID: 67, inputClusters: [], outputClusters: []},
                 {ID: 242, profileID: 41440, deviceID: 97, inputClusters: [], outputClusters: [33]},
             ]},
         ],
@@ -125,5 +130,13 @@ module.exports = [
         vendor: 'EcoDim',
         description: 'Zigbee LED filament light dimmable E27, globe G125, flame 2200K',
         extend: extend.light_onoff_brightness(),
+    },
+    {
+        fingerprint: [{modelID: 'CCT Light', manufacturerName: 'ZigBee/CCT', manufacturerID: 4137},
+            {modelID: 'CCT Light', manufacturerName: 'Astuta/ZB-CCT', manufacturerID: 4137}],
+        model: 'ED-10041',
+        vendor: 'EcoDim',
+        description: 'Zigbee LED filament light dimmable E27, edison ST64, flame 2200K',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [153, 454]}),
     },
 ];

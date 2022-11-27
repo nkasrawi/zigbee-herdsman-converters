@@ -9,9 +9,10 @@ const tuya = require('../lib/tuya');
 
 module.exports = [
     {
-        fingerprint: [{modelID: 'TS011F', manufacturerName: '_TZ3000_air9m6af'}, {modelID: 'TS011F', manufacturerName: '_TZ3000_9djocypn'}],
+        fingerprint: [{modelID: 'TS011F', manufacturerName: '_TZ3000_air9m6af'}, {modelID: 'TS011F', manufacturerName: '_TZ3000_9djocypn'},
+            {modelID: 'TS011F', manufacturerName: '_TZ3000_bppxj3sf'}],
         zigbeeModel: ['JZ-ZB-005'],
-        model: 'WP33-EU',
+        model: 'WP33-EU/WP34-EU',
         vendor: 'LELLKI',
         description: 'Multiprise with 4 AC outlets and 2 USB super charging ports (16A)',
         extend: extend.switch(),
@@ -22,11 +23,10 @@ module.exports = [
             return {l1: 1, l2: 2, l3: 3, l4: 4, l5: 5};
         },
         configure: async (device, coordinatorEndpoint, logger) => {
-            await reporting.bind(device.getEndpoint(1), coordinatorEndpoint, ['genOnOff']);
-            await reporting.bind(device.getEndpoint(2), coordinatorEndpoint, ['genOnOff']);
-            await reporting.bind(device.getEndpoint(3), coordinatorEndpoint, ['genOnOff']);
-            await reporting.bind(device.getEndpoint(4), coordinatorEndpoint, ['genOnOff']);
-            await reporting.bind(device.getEndpoint(5), coordinatorEndpoint, ['genOnOff']);
+            await tuya.configureMagicPacket(device, coordinatorEndpoint, logger);
+            for (const ID of [1, 2, 3, 4, 5]) {
+                await reporting.bind(device.getEndpoint(ID), coordinatorEndpoint, ['genOnOff']);
+            }
         },
     },
     {
@@ -40,7 +40,7 @@ module.exports = [
             const endpoint = device.getEndpoint(1);
             await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
         },
-        exposes: [e.switch(), exposes.enum('power_outage_memory', ea.STATE_SET, ['on', 'off', 'restore'])
+        exposes: [e.switch(), exposes.enum('power_outage_memory', ea.ALL, ['on', 'off', 'restore'])
             .withDescription('Recover state after power outage')],
     },
     {
@@ -99,28 +99,10 @@ module.exports = [
             device.save();
         },
         options: [exposes.options.measurement_poll_interval()],
-        exposes: [e.switch().withEndpoint('l1'), e.power(), e.current(), e.voltage().withAccess(ea.STATE),
-            e.energy(), exposes.enum('power_outage_memory', ea.STATE_SET, ['on', 'off', 'restore'])
+        exposes: [e.switch(), e.power(), e.current(), e.voltage().withAccess(ea.STATE),
+            e.energy(), exposes.enum('power_outage_memory', ea.ALL, ['on', 'off', 'restore'])
                 .withDescription('Recover state after power outage')],
         onEvent: tuya.onEventMeasurementPoll,
-    },
-    {
-        fingerprint: [{modelID: 'TS011F', manufacturerName: '_TZ3000_bppxj3sf'}],
-        model: 'WP34-EU',
-        vendor: 'LELLKI',
-        description: 'Outlet power cord with 4 sockets and 2 USB',
-        exposes: [e.switch().withEndpoint('l1'), e.switch().withEndpoint('l2'), e.switch().withEndpoint('l3'),
-            e.switch().withEndpoint('l4'), e.switch().withEndpoint('l5')],
-        extend: extend.switch(),
-        meta: {multiEndpoint: true},
-        configure: async (device, coordinatorEndpoint, logger) => {
-            for (const ID of [1, 2, 3, 4, 5]) {
-                await reporting.bind(device.getEndpoint(ID), coordinatorEndpoint, ['genOnOff']);
-            }
-        },
-        endpoint: (device) => {
-            return {'l1': 1, 'l2': 2, 'l3': 3, 'l4': 4, 'l5': 5};
-        },
     },
     {
         fingerprint: [{modelID: 'TS011F', manufacturerName: '_TZ3000_0yxeawjt'}],
@@ -131,6 +113,7 @@ module.exports = [
         toZigbee: [tz.on_off, tz.tuya_switch_power_outage_memory],
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
+            await tuya.configureMagicPacket(device, coordinatorEndpoint, logger);
             await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
             endpoint.saveClusterAttributeKeyValue('haElectricalMeasurement', {acCurrentDivisor: 1000, acCurrentMultiplier: 1});
             endpoint.saveClusterAttributeKeyValue('seMetering', {divisor: 100, multiplier: 1});
@@ -138,7 +121,7 @@ module.exports = [
         },
         options: [exposes.options.measurement_poll_interval()],
         exposes: [e.switch(), e.power(), e.current(), e.voltage().withAccess(ea.STATE),
-            e.energy(), exposes.enum('power_outage_memory', ea.STATE_SET, ['on', 'off', 'restore'])
+            e.energy(), exposes.enum('power_outage_memory', ea.ALL, ['on', 'off', 'restore'])
                 .withDescription('Recover state after power outage')],
         onEvent: tuya.onEventMeasurementPoll,
     },
@@ -148,13 +131,16 @@ module.exports = [
         description: 'Power cord 4 sockets EU (with power monitoring)',
         vendor: 'LELLKI',
         extend: extend.switch(),
-        fromZigbee: [fz.on_off, fz.electrical_measurement, fz.metering, fz.ignore_basic_report, fz.tuya_switch_power_outage_memory],
+        fromZigbee: [fz.on_off_force_multiendpoint, fz.electrical_measurement, fz.metering, fz.ignore_basic_report,
+            fz.tuya_switch_power_outage_memory],
         toZigbee: [tz.on_off, tz.tuya_switch_power_outage_memory],
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
-            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff']);
-            await reporting.bind(device.getEndpoint(2), coordinatorEndpoint, ['genOnOff']);
-            await reporting.bind(device.getEndpoint(3), coordinatorEndpoint, ['genOnOff']);
+            await tuya.configureMagicPacket(device, coordinatorEndpoint, logger);
+            for (const ep of [1, 2, 3]) {
+                await reporting.bind(device.getEndpoint(ep), coordinatorEndpoint, ['genOnOff']);
+                await reporting.onOff(device.getEndpoint(ep));
+            }
             endpoint.saveClusterAttributeKeyValue('haElectricalMeasurement', {acCurrentDivisor: 1000, acCurrentMultiplier: 1});
             endpoint.saveClusterAttributeKeyValue('seMetering', {divisor: 100, multiplier: 1});
             device.save();
@@ -162,7 +148,7 @@ module.exports = [
         options: [exposes.options.measurement_poll_interval()],
         exposes: [e.switch().withEndpoint('l1'), e.switch().withEndpoint('l2'),
             e.switch().withEndpoint('l3'), e.power(), e.current(), e.voltage().withAccess(ea.STATE),
-            e.energy(), exposes.enum('power_outage_memory', ea.STATE_SET, ['on', 'off', 'restore'])
+            e.energy(), exposes.enum('power_outage_memory', ea.ALL, ['on', 'off', 'restore'])
                 .withDescription('Recover state after power outage')],
         endpoint: (device) => {
             return {l1: 1, l2: 2, l3: 3};

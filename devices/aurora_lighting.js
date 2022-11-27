@@ -18,6 +18,17 @@ const tzLocal = {
             return {state: {backlight_led: state.toUpperCase()}};
         },
     },
+    backlight_brightness: {
+        key: ['brightness'],
+        options: [exposes.options.transition()],
+        convertSet: async (entity, key, value, meta) => {
+            await entity.command('genLevelCtrl', 'moveToLevel', {level: value, transtime: 0}, utils.getOptions(meta.mapped, entity));
+            return {state: {brightness: value}};
+        },
+        convertGet: async (entity, key, meta) => {
+            await entity.read('genLevelCtrl', ['currentLevel']);
+        },
+    },
 };
 
 const disableBatteryRotaryDimmerReporting = async (endpoint) => {
@@ -69,6 +80,20 @@ const batteryRotaryDimmer = (...endpointsIds) => ({
 
 module.exports = [
     {
+        zigbeeModel: ['TWBulb51AU'],
+        model: 'AU-A1GSZ9CX',
+        vendor: 'Aurora',
+        description: 'AOne GLS lamp 9w tunable dimmable 2200-5000K',
+        extend: extend.light_onoff_brightness_colortemp({colorTempRange: [200, 454]}),
+    },
+    {
+        zigbeeModel: ['RGBCXStrip50AU'],
+        model: 'AU-A1ZBSCRGBCX',
+        vendor: 'Aurora',
+        description: 'RGBW LED strip controller',
+        extend: extend.light_onoff_brightness_colortemp_color({colorTempRange: [166, 400]}),
+    },
+    {
         zigbeeModel: ['TWGU10Bulb50AU'],
         model: 'AU-A1GUZBCX5',
         vendor: 'Aurora Lighting',
@@ -98,7 +123,7 @@ module.exports = [
         extend: extend.light_onoff_brightness({disableEffect: true}),
     },
     {
-        zigbeeModel: ['RGBGU10Bulb50AU'],
+        zigbeeModel: ['RGBGU10Bulb50AU', 'RGBGU10Bulb50AU2'],
         model: 'AU-A1GUZBRGBW',
         vendor: 'Aurora Lighting',
         description: 'AOne 5.6w smart RGBW tuneable GU10 lamp',
@@ -116,12 +141,12 @@ module.exports = [
         model: 'AU-A1ZBRC',
         vendor: 'Aurora Lighting',
         description: 'AOne smart remote',
-        fromZigbee: [fz.battery, fz.command_on, fz.command_off, fz.command_step],
+        fromZigbee: [fz.battery, fz.command_on, fz.command_off, fz.command_step, fz.command_recall, fz.command_store],
         toZigbee: [],
-        exposes: [e.battery(), e.action(['on', 'off', 'brightness_step_up', 'brightness_step_down'])],
+        exposes: [e.battery(), e.action(['on', 'off', 'brightness_step_up', 'brightness_step_down', 'recall_1', 'store_1'])],
         configure: async (device, coordinatorEndpoint, logger) => {
             const endpoint = device.getEndpoint(1);
-            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'genPowerCfg']);
+            await reporting.bind(endpoint, coordinatorEndpoint, ['genOnOff', 'genLevelCtrl', 'genPowerCfg', 'genScenes']);
         },
     },
     {
@@ -181,12 +206,12 @@ module.exports = [
         model: 'AU-A1ZBDSS',
         vendor: 'Aurora Lighting',
         description: 'Double smart socket UK',
-        fromZigbee: [fz.identify, fz.on_off, fz.electrical_measurement],
+        fromZigbee: [fz.identify, fz.on_off, fz.electrical_measurement, fz.brightness],
         exposes: [e.switch().withEndpoint('left'), e.switch().withEndpoint('right'),
             e.power().withEndpoint('left'), e.power().withEndpoint('right'),
             exposes.numeric('brightness', ea.ALL).withValueMin(0).withValueMax(254)
                 .withDescription('Brightness of this backlight LED')],
-        toZigbee: [tz.light_onoff_brightness],
+        toZigbee: [tzLocal.backlight_brightness, tz.on_off],
         meta: {multiEndpoint: true},
         endpoint: (device) => {
             return {'left': 1, 'right': 2};
