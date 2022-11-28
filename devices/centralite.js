@@ -265,7 +265,6 @@ module.exports = [
             await reporting.batteryVoltage(endpoint);
             await reporting.thermostatRunningState(endpoint);
             await reporting.thermostatTemperature(endpoint);
-            await reporting.thermostatTemperatureCalibration(endpoint);
             await reporting.fanMode(endpoint);
             await reporting.thermostatTemperatureSetpointHold(endpoint);
         },
